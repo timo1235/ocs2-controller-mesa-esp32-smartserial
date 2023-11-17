@@ -1,8 +1,11 @@
 #pragma once
 
-#include "LBP.h"   // nur testweise
 #include <Arduino.h>
 #include <crc8.h>
+#include <debugHelper.h>
+#include <pinmap.h>
+#include <registerIn.h>
+#include <registerOut.h>
 #include <sserial.h>
 
 // #define SHOW_DEBUG
@@ -30,11 +33,7 @@
         } while (0)
 #endif
 
-// Queue for serial outputs
-extern QueueHandle_t queue;
+// Externals
 
-void tprint(const char *format, ...);
-
-#define ABS(a)          (((a) < 0.0) ? -(a) : (a))
-#define MAX(a, b)       (((a) > (b)) ? (a) : (b))
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+extern RegisterOut outRegister;
+extern RegisterIn  inRegister;

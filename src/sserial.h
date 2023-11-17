@@ -51,7 +51,7 @@
 #define CT_RPC   2   // 10b
 #define CT_LOCAL 3   // 11b
 
-#define MEM_SIZE 2048
+#define SSERIAL_MEM_SIZE 2048
 
 #define RECORD_TYPE_PROCESS_DATA_RECORD 0xA0
 #define RECORD_TYPE_MODE_DATA_RECORD    0xB0
@@ -74,7 +74,7 @@
 #define DATA_DIRECTION_BI_DIRECTIONAL 0x40
 #define DATA_DIRECTION_OUTPUT         0x80
 
-#define MEMPTR(p) ((uint32_t) &p - (uint32_t) &memory)
+#define MEMPTR(p) ((uint32_t) & p - (uint32_t) & memory)
 
 #define MEMU8(ptr)  (memory.bytes[ptr])
 #define MEMU16(ptr) (memory.bytes[ptr] | memory.bytes[ptr + 1] << 8)
@@ -108,6 +108,10 @@
 #define BITSLEFT(ptr) (8 - ptr)
 
 #define BOOLPIN(pin) (uint8_t)(PIN(pin) > 0.0)
+
+#define ABS(a)          (((a) < 0.0) ? -(a) : (a))
+#define MAX(a, b)       (((a) > (b)) ? (a) : (b))
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 typedef union {
     struct {
@@ -164,10 +168,10 @@ typedef union {
     struct {
         discovery_rpc_t discovery;   // 6 bytes
         uint16_t        foo;         // padding, so heap is word aligned
-        uint8_t         heap[MEM_SIZE - sizeof(discovery_rpc_t)];
+        uint8_t         heap[SSERIAL_MEM_SIZE - sizeof(discovery_rpc_t)];
     };
 
-    uint8_t bytes[MEM_SIZE];
+    uint8_t bytes[SSERIAL_MEM_SIZE];
 } memory_t;
 
 typedef struct {
@@ -190,5 +194,4 @@ typedef struct {
 } pd_table_t;
 #pragma pack(pop)
 
-void frt_func();
 void sserial_init();

@@ -13,7 +13,7 @@
  *    ReflectOut   = True
  *    Algorithm    = table-driven
  *****************************************************************************/
-#include <includes.h>
+#include <crc8.h>
 
 /**
  * Static table used for the table_driven implementation.

@@ -8,6 +8,10 @@
     },
     {
       "path": "../ocs2.x-esp32-panel-software"
+    },
+    {
+      "name": "mese_s2_test",
+      "path": "C:/Users/timo/Documents/PlatformIO/Projects/mese_s2_test"
     }
   ],
   "settings": {
