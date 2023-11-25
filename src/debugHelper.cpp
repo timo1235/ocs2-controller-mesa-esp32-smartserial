@@ -1,43 +1,42 @@
-#include <Arduino.h>
-#include <debugHelper.h>
+#include <includes.h>
 
-QueueHandle_t _printQueue;
-QueueHandle_t _printQueueDirekt;
-TaskHandle_t  debugSerialTaskHandle;
+Debug::Debug() {}
 
-void addPrintToQueue(const char *format, ...) {
+void Debug::addPrint(const char *format, ...) {
     char    buf[256];   // Puffer für die formatierte Zeichenkette
     va_list args;
     va_start(args, format);
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    // Free space in queue if it is full
-    while (uxQueueSpacesAvailable(_printQueue) == 0) {
-        xQueueReceive(_printQueue, NULL, 0);   // remove oldest element
+    if (xSemaphoreTake(_queueSemaphore, (TickType_t) 0) == pdTRUE) {
+        char tempBuf[256];
+        while (uxQueueSpacesAvailable(_printQueue) == 0) {
+            xQueueReceive(_printQueue, &tempBuf, 0);   // remove oldest element safely
+        }
+        xQueueSend(_printQueue, &buf, 0);
+        xSemaphoreGive(_queueSemaphore);
     }
-
-    // Add element to queue
-    xQueueSend(_printQueue, &buf, 0);
 }
 
-void addPrint(const char *format, ...) {
+void Debug::print(const char *format, ...) {
     char    buf[256];   // Puffer für die formatierte Zeichenkette
     va_list args;
     va_start(args, format);
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    // Free space in queue if it is full
-    while (uxQueueSpacesAvailable(_printQueueDirekt) == 0) {
-        xQueueReceive(_printQueueDirekt, NULL, 0);   // remove oldest element
+    if (xSemaphoreTake(_directQueueSemaphore, (TickType_t) 0) == pdTRUE) {
+        char tempBuf[256];
+        while (uxQueueSpacesAvailable(_printQueueDirekt) == 0) {
+            xQueueReceive(_printQueueDirekt, &tempBuf, 0);
+        }
+        xQueueSend(_printQueueDirekt, &buf, 0);
+        xSemaphoreGive(_directQueueSemaphore);
     }
-
-    // Add element to queue
-    xQueueSend(_printQueueDirekt, &buf, 0);
 }
 
-void printQueue() {
+void Debug::printQueue() {
     char element[256];
     while (uxQueueMessagesWaiting(_printQueue) > 0) {
         xQueueReceive(_printQueue, &element, 0);
@@ -45,30 +44,34 @@ void printQueue() {
     }
 }
 
-void debugSerialTask(void *pvParameters) {
-    // auto *ioControl = (IOCONTROL *)pvParameters;
-    char element[256];
+void Debug::debugSerialTask(void *pvParameters) {
+    Debug *debug = static_cast<Debug *>(pvParameters);
+    char   element[256];
     for (;;) {
-        // Check if queue has elements and process
-        if (uxQueueMessagesWaiting(_printQueueDirekt) > 0) {
-            xQueueReceive(_printQueueDirekt, &element, 0);
-            Serial.println(element);
-            vTaskDelay(1);
+        if (xSemaphoreTake(debug->_directQueueSemaphore, portMAX_DELAY)) {
+            if (uxQueueMessagesWaiting(debug->_printQueueDirekt) > 0) {
+                xQueueReceive(debug->_printQueueDirekt, &element, 0);
+                Serial.println(element);
+            }
+            xSemaphoreGive(debug->_directQueueSemaphore);
         }
         vTaskDelay(1);
     }
 }
 
-void debugHelperSetup() {
+void Debug::init() {
     _printQueue       = xQueueCreate(100, sizeof(char[256]));
     _printQueueDirekt = xQueueCreate(100, sizeof(char[256]));
+
+    _queueSemaphore       = xSemaphoreCreateMutex();   // Initialisieren des Semaphors für _printQueue
+    _directQueueSemaphore = xSemaphoreCreateMutex();   // Initialisieren des Semaphors für _printQueueDirekt
 
     // Create a task for the debug serial communication
     xTaskCreatePinnedToCore(debugSerialTask,        /* Task function. */
                             "debugHelperQueueTask", /* name of task. */
                             3000,                   /* Stack size of task */
-                            NULL,                   /* parameter of the task */
+                            this,                   /* parameter of the task */
                             1,                      /* priority of the task */
-                            &debugSerialTaskHandle, /* Task handle to keep track of created task */
-                            1);
+                            NULL,                   /* Task handle to keep track of created task */
+                            DEFAULT_CPU);
 }

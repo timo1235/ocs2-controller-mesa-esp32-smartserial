@@ -1,4 +1,4 @@
-#include <registerOut.h>
+#include <includes.h>
 
 RegisterOut::RegisterOut(int dataPin, int clockPin, int latchPin) : dataPin(dataPin), clockPin(clockPin), latchPin(latchPin) {
     pinMode(dataPin, OUTPUT);
@@ -74,7 +74,7 @@ void RegisterOut::init() {
                             this,                            // Parameter für die Task-Funktion
                             1,                               // Priorität
                             NULL,                            // Task-Handle
-                            1                                // Core-ID
+                            DEFAULT_CPU                      // Core-ID
     );
 }
 

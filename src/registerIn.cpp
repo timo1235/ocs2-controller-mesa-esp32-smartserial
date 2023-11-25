@@ -1,4 +1,4 @@
-#include <registerIn.h>
+#include <includes.h>
 
 RegisterIn::RegisterIn(int dataPin, int clockPin, int loadPin) : dataPin(dataPin), clockPin(clockPin), loadPin(loadPin) {
     pinMode(dataPin, INPUT);
@@ -27,7 +27,7 @@ void RegisterIn::init() {
                             this,                          // Parameter für die Task-Funktion
                             1,                             // Priorität
                             NULL,                          // Task-Handle
-                            1                              // Core-ID
+                            DEFAULT_CPU                    // Core-ID
     );
 }
 

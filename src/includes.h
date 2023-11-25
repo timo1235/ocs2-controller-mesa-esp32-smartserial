@@ -1,6 +1,9 @@
 #pragma once
 
+#include <ADCManager.h>
+#include <Adafruit_ADS1X15.h>
 #include <Arduino.h>
+#include <SPI.h>
 #include <crc8.h>
 #include <debugHelper.h>
 #include <pinmap.h>
@@ -19,21 +22,12 @@
     #define DEBUG_PRINTF(...)
 #endif
 
-#ifdef SHOW_VERBOSE
-    #define VERB_PRINTF tprint
-#else
-    #define VERB_PRINTF(...)
-#endif
-
-#if 1
-    #define SERIAL1_FLUSH Serial1.flush
-#else
-    #define SERIAL1_FLUSH(x)                                                                                                               \
-        do {                                                                                                                               \
-        } while (0)
-#endif
-
 // Externals
 
 extern RegisterOut outRegister;
 extern RegisterIn  inRegister;
+extern ADCManager  adcManager;
+extern Debug       debug;
+
+#define SSERIAL_CPU 1
+#define DEFAULT_CPU 0
