@@ -15,6 +15,8 @@
 // #define SHOW_VERBOSE
 // #define SHOW_PDATA_IN
 
+// #define USE_DEBUG
+
 #ifdef SHOW_DEBUG
     #define DEBUG_PRINTF tprint
 // #define DEBUG_PRINTF(f_, ...) do {Serial1.printf((f_), ##__VA_ARGS__);} while (0)
@@ -28,6 +30,7 @@ extern RegisterOut outRegister;
 extern RegisterIn  inRegister;
 extern ADCManager  adcManager;
 extern Debug       debug;
+extern bool        sserial_timeoutFlag;
 
 #define SSERIAL_CPU 1
 #define DEFAULT_CPU 0

@@ -33,9 +33,10 @@
     #define SSERIAL_TXD        17
 
 // 74HC597 IN Shift Register
-    #define REGISTER_IN_LATCH  20
-    #define REGISTER_IN_CLK    20
-    #define REGISTER_IN_DATA   20
+    #define REGISTER_IN_LATCH  4
+    #define REGISTER_IN_CLK    5
+    #define REGISTER_IN_DATA   27
+    #define REGISTER_IN_LOAD   26
 
 // 74HC595 OUT Shift Register
     #define REGISTER_OUT_LATCH 20

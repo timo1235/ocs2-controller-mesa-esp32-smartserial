@@ -3,23 +3,21 @@
 ADCManager::ADCManager() {}
 
 void ADCManager::init() {
-    Wire.setPins(I2C_SDA, I2C_SCL);
-    Wire.setClock(1000000);
+    Serial.println("Initializing ADCs...");
+    // Wire.setPins(I2C_SDA, I2C_SCL);
+    // Wire.setClock(1000000);
 
-    adc1.setGain(GAIN_TWOTHIRDS);
-    adc1.begin(ADS1_ADDRESS, &Wire);
-    adc1.setDataRate(RATE_ADS1115_250SPS);
-    // print out data rate
-    Serial.print("ADS1 Data Rate: ");
-    Serial.print(adc1.getDataRate());
+    // adc1.setGain(GAIN_TWOTHIRDS);
+    // adc1.begin(ADS1_ADDRESS, &Wire);
+    // adc1.setDataRate(RATE_ADS1115_250SPS);
 
-    adc2.setGain(GAIN_TWOTHIRDS);
-    adc2.begin(ADS2_ADDRESS, &Wire);
-    adc2.setDataRate(RATE_ADS1115_250SPS);
+    // adc2.setGain(GAIN_TWOTHIRDS);
+    // adc2.begin(ADS2_ADDRESS, &Wire);
+    // adc2.setDataRate(RATE_ADS1115_250SPS);
 
     xTaskCreatePinnedToCore(readInputsTask,    // Task-Funktion
                             "ReadADCInputs",   // Name des Tasks
-                            2048,              // Stackgröße
+                            10000,             // Stackgröße
                             this,              // Parameter für die Task-Funktion
                             1,                 // Priorität
                             NULL,              // Task-Handle
@@ -27,15 +25,28 @@ void ADCManager::init() {
     );
 }
 
+uint32_t counter = 0;
+
 void ADCManager::readInputsTask(void *pvParameters) {
     ADCManager *adcManager = static_cast<ADCManager *>(pvParameters);
     for (;;) {
-        adcManager->joystickX     = adcManager->readJoystickX();
-        adcManager->joystickY     = adcManager->readJoystickY();
-        adcManager->joystickZ     = adcManager->readJoystickZ();
-        adcManager->feedrate      = adcManager->readFeedrate();
-        adcManager->rotationSpeed = adcManager->readRotationSpeed();
-        vTaskDelay(pdMS_TO_TICKS(50));
+        counter++;
+        adcManager->joystickX     = random(0, 26000);
+        adcManager->joystickY     = random(0, 26000);
+        adcManager->joystickZ     = random(0, 26000);
+        adcManager->feedrate      = random(0, 26000);
+        adcManager->rotationSpeed = random(0, 26000);
+        // adcManager->joystickX     = adcManager->readJoystickX();
+        // adcManager->joystickY     = adcManager->readJoystickY();
+        // adcManager->joystickZ     = adcManager->readJoystickZ();
+        // adcManager->feedrate      = adcManager->readFeedrate();
+        // adcManager->rotationSpeed = adcManager->readRotationSpeed();
+        // if (sserial_timeoutFlag) {
+        debug.print("Joystick X: %d", map(adcManager->joystickX, 0, 26000, -127, 127));
+        debug.print("Counter: %d", counter);
+        // }
+
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 

@@ -1,24 +1,56 @@
 #include <includes.h>
 
-RegisterIn::RegisterIn(int dataPin, int clockPin, int loadPin) : dataPin(dataPin), clockPin(clockPin), loadPin(loadPin) {
+RegisterIn::RegisterIn(int dataPin, int clockPin, int latchPin, int loadPin)
+    : dataPin(dataPin), clockPin(clockPin), latchPin(latchPin), loadPin(loadPin) {
     pinMode(dataPin, INPUT);
     pinMode(clockPin, OUTPUT);
-    pinMode(loadPin, OUTPUT);
+    pinMode(latchPin, OUTPUT);
+    pinMode(REGISTER_IN_LOAD, OUTPUT);
 }
 
 void RegisterIn::updateInputs() {
-    digitalWrite(loadPin, LOW);
+    // Setzt PL-Pin kurz auf LOW, um parallele Daten zu übertragen
+    digitalWrite(REGISTER_IN_LOAD, LOW);
     delayMicroseconds(5);
-    digitalWrite(loadPin, HIGH);
+    digitalWrite(REGISTER_IN_LOAD, HIGH);
+    // Setzt STCP-Pin kurz auf HIGH, um Daten ins Schieberegister zu laden
+    digitalWrite(latchPin, LOW);
+    delayMicroseconds(5);
+    digitalWrite(latchPin, HIGH);
 
-    regData.inputData = 0;
-    for (int i = 0; i < 4; ++i) {
-        regData.inputData <<= 8;
-        regData.inputData |= shiftIn(dataPin, clockPin, MSBFIRST);
+    // Reset Datenbytes
+    data.bytes.byte0 = 0;
+    data.bytes.byte1 = 0;
+    data.bytes.byte2 = 0;
+    data.bytes.byte3 = 0;
+
+    // Lesen der Daten aus allen drei Registern
+    for (int j = 0; j < 4; j++) {
+        for (int i = 0; i < 8; i++) {
+            // Ein Bit einlesen
+            int bitVal = digitalRead(dataPin);
+            switch (j) {
+            case 0:
+                data.bytes.byte0 |= (bitVal << (7 - i));
+                break;
+            case 1:
+                data.bytes.byte1 |= (bitVal << (7 - i));
+                break;
+            case 2:
+                data.bytes.byte2 |= (bitVal << (7 - i));
+                break;
+            case 3:
+                data.bytes.byte3 |= (bitVal << (7 - i));
+                break;
+            }
+
+            // Nächstes Bit vorbereiten
+            digitalWrite(clockPin, HIGH);
+            delayMicroseconds(5);
+            digitalWrite(clockPin, LOW);
+        }
     }
 }
-
-bool RegisterIn::get(Input input) const { return (regData.inputData >> static_cast<int>(input)) & 0x1; }
 
 void RegisterIn::init() {
     xTaskCreatePinnedToCore(RegisterIn::inputUpdateTask,   // Task-Funktion
@@ -35,6 +67,7 @@ void RegisterIn::inputUpdateTask(void *pvParameters) {
     RegisterIn *registerInstance = static_cast<RegisterIn *>(pvParameters);
     for (;;) {
         registerInstance->updateInputs();
-        vTaskDelay(pdMS_TO_TICKS(5));   // Warte 5 Millisekunden
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

@@ -10,52 +10,13 @@
 class RegisterIn {
   public:
     /**
-     * @brief Enum representing the input pins.
-     *
-     */
-    enum class Input {
-        in1,
-        in2,
-        in3,
-        in4,
-        in5,
-        in6,
-        in7,
-        in8,
-        in9,
-        in10,
-        in11,
-        in12,
-        in13,
-        in14,
-        in15,
-        in16,
-        alarmAll,
-        programmStart,
-        motorStart,
-        ok,
-        d4_1,
-        d5_1,
-        d6_1,
-        d7_1,
-        d0_2,
-        auswahlZ,
-        speed2,
-        auswahlY,
-        speed1,
-        auswahlX,
-        d6_2,
-        d7_2
-    };
-
-    /**
      * @brief Construct a new RegisterIn object.
      *
      * @param dataPin The data pin.
      * @param clockPin The clock pin.
      * @param loadPin The load pin.
      */
-    RegisterIn(int dataPin, int clockPin, int loadPin);
+    RegisterIn(int dataPin, int clockPin, int latchPin, int loadPin);
 
     /**
      * @brief Update the inputs.
@@ -64,29 +25,10 @@ class RegisterIn {
     void updateInputs();
 
     /**
-     * @brief Get the input value.
-     *
-     * @param input The input pin.
-     * @return true The input is high.
-     * @return false The input is low.
-     */
-    bool get(Input input) const;
-
-    /**
      * @brief Initialize the input register.
      *
      */
     void init();
-
-  private:
-    int dataPin, clockPin, loadPin;
-
-    /**
-     * @brief Task to update the inputs.
-     *
-     * @param pvParameters The parameters for the task.
-     */
-    static void inputUpdateTask(void *pvParameters);
 
     union {
         uint32_t inputData;
@@ -131,5 +73,15 @@ class RegisterIn {
             uint32_t in2 : 1;
             uint32_t in1 : 1;
         } bits;
-    } regData;
+    } data;
+
+  private:
+    int dataPin, clockPin, latchPin, loadPin;
+
+    /**
+     * @brief Task to update the inputs.
+     *
+     * @param pvParameters The parameters for the task.
+     */
+    static void inputUpdateTask(void *pvParameters);
 };

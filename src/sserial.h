@@ -194,4 +194,6 @@ typedef struct {
 } pd_table_t;
 #pragma pack(pop)
 
+// bool sserial_timeoutFlag;
+
 void sserial_init();
