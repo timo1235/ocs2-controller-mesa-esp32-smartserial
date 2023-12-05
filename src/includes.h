@@ -32,5 +32,12 @@ extern ADCManager  adcManager;
 extern Debug       debug;
 extern bool        sserial_timeoutFlag;
 
+// CPU allocation
+// TODO: Test tskNO_AFFINITY as Core ID, then a task runs on both cores and can switch between them
+// SSerial needs to run on CPU 1 togehter with setup and loop -> make sure loop is not used for anything else
+// Only CPU1 is suitable for SSerial, since it can run without calling vtaskDelay, meaning, it can be blocking
+// without triggering the watchdog.
 #define SSERIAL_CPU 1
+// All other tasks can run on CPU 0 to free CPU 1 for SSerial
+// CPU 0 needs to call vtaskDelay, otherwise the watchdog triggered
 #define DEFAULT_CPU 0

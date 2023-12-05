@@ -31,22 +31,26 @@ void ADCManager::readInputsTask(void *pvParameters) {
     ADCManager *adcManager = static_cast<ADCManager *>(pvParameters);
     for (;;) {
         counter++;
-        adcManager->joystickX     = random(0, 26000);
-        adcManager->joystickY     = random(0, 26000);
-        adcManager->joystickZ     = random(0, 26000);
-        adcManager->feedrate      = random(0, 26000);
-        adcManager->rotationSpeed = random(0, 26000);
+        adcManager->joystickX     = random(0, 4095);
+        adcManager->joystickY     = random(0, 4095);
+        adcManager->joystickZ     = random(0, 4095);
+        adcManager->feedrate      = random(0, 4095);
+        adcManager->rotationSpeed = random(0, 4095);
         // adcManager->joystickX     = adcManager->readJoystickX();
         // adcManager->joystickY     = adcManager->readJoystickY();
         // adcManager->joystickZ     = adcManager->readJoystickZ();
         // adcManager->feedrate      = adcManager->readFeedrate();
         // adcManager->rotationSpeed = adcManager->readRotationSpeed();
         // if (sserial_timeoutFlag) {
-        debug.print("Joystick X: %d", map(adcManager->joystickX, 0, 26000, -127, 127));
+        debug.print("Joystick X: %d", adcManager->joystickX);
+        debug.print("Joystick Y: %d", adcManager->joystickY);
+        debug.print("Joystick Z: %d", adcManager->joystickZ);
+        debug.print("Feedrate: %d", adcManager->feedrate);
+        debug.print("Rotation Speed: %d", adcManager->rotationSpeed);
         debug.print("Counter: %d", counter);
         // }
 
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        vTaskDelay(pdMS_TO_TICKS(20000));
     }
 }
 

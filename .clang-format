@@ -1,7 +1,7 @@
 # options: https://clang.llvm.org/docs/ClangFormatStyleOptions.html
 BasedOnStyle: LLVM
 IndentWidth: 4
-ColumnLimit: 140
+ColumnLimit: 180
 # does (int) x instead of (int)x
 SpaceAfterCStyleCast: true
 # spaces, not tabs!

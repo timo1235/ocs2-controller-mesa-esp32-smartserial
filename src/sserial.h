@@ -76,38 +76,21 @@
 
 #define MEMPTR(p) ((uint32_t) & p - (uint32_t) & memory)
 
-#define MEMU8(ptr)  (memory.bytes[ptr])
-#define MEMU16(ptr) (memory.bytes[ptr] | memory.bytes[ptr + 1] << 8)
-#define MEMU32(ptr) (memory.bytes[ptr] | memory.bytes[ptr + 1] << 8 | memory.bytes[ptr + 2] << 16 | memory.bytes[ptr + 3] << 24)
-#define MEMFLOAT(ptr)                                                                                                                      \
-    ((float) ({                                                                                                                            \
-        uint32_t tmp = MEMU32(ptr);                                                                                                        \
-        *((float *) &tmp);                                                                                                                 \
-    }))
-
 #define NUM_BYTES(bits) (bits / 8 + (bits % 8 > 0 ? 1 : 0))
 
 #define IS_INPUT(pdr)  (pdr->data_direction != 0x80)
 #define IS_OUTPUT(pdr) (pdr->data_direction != 0x00)
 
-#define SIGNED(pdr)   (pdr->data_type == DATA_TYPE_SIGNED || pdr->data_type == DATA_TYPE_NONVOL_SIGNED)
-#define UNSIGNED(pdr) (pdr->data_type == DATA_TYPE_UNSIGNED || pdr->data_type == DATA_TYPE_NONVOL_UNSIGNED)
-
 #define INDIRECT_PD(pd_ptr) ((process_data_descriptor_t *) (memory.bytes + *pd_ptr))
-#define DATA_DIR(pd_ptr)    INDIRECT_PD(pd_ptr)->data_direction
 #define DATA_SIZE(pd_ptr)   INDIRECT_PD(pd_ptr)->data_size
 
-#define ADD_PROCESS_VAR(args)                                                                                                              \
-    *ptocp = add_pd args;                                                                                                                  \
-    input_bits += IS_INPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                     \
-    output_bits += IS_OUTPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                   \
+#define ADD_PROCESS_VAR(args)                                                                                                                                                      \
+    *ptocp = add_pd args;                                                                                                                                                          \
+    input_bits += IS_INPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                                                             \
+    output_bits += IS_OUTPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                                                           \
     last_pd = INDIRECT_PD(ptocp++)
 #define ADD_GLOBAL_VAR(args) *gtocp++ = add_pd args
 #define ADD_MODE(args)       *gtocp++ = add_mode args
-
-#define BITSLEFT(ptr) (8 - ptr)
-
-#define BOOLPIN(pin) (uint8_t)(PIN(pin) > 0.0)
 
 #define ABS(a)          (((a) < 0.0) ? -(a) : (a))
 #define MAX(a, b)       (((a) > (b)) ? (a) : (b))
@@ -197,3 +180,40 @@ typedef struct {
 // bool sserial_timeoutFlag;
 
 void sserial_init();
+
+class SSerial {
+  public:
+    SSerial();
+    void init();
+    void loop();
+
+  private:
+    void     handleLocalRead();
+    void     handleLocalWrite();
+    void     handleRPC();
+    void     handleReadWrite(bool isRead);
+    void     send(uint8_t len, uint8_t docrc);
+    void     emptySerialBuffer();
+    bool     crcRequest(uint8_t len);
+    uint8_t  crc8(uint8_t *addr, uint8_t len);
+    uint16_t addPD(const char *name_string, const char *unit_string, uint8_t data_size_in_bits, uint8_t data_type, uint8_t data_dir, float param_min, float param_max);
+    uint16_t addMode(const char *name_string, uint8_t index, uint8_t type);
+    void     metadata(pd_metadata_t *pdm, process_data_descriptor_t *ptr);
+    void     printPD(process_data_descriptor_t *pd);
+    // Add other private methods and member variables as needed
+
+    // Example of private member variables
+    volatile uint8_t rxbuf[128];   // rx dma buffer
+    volatile uint8_t txbuf[128];   // tx dma buffer
+    uint16_t         address;      // current address pointer
+    int              rxpos;        // read pointer for rx ringbuffer
+    uint32_t         timeout;
+    lbp_t            lbp;
+    unit_no_t        unit;
+    memory_t         memory;
+    pd_table_t       pd_table;
+    // Other member variables as required
+
+    // Replace the #define macros for ADD_PROCESS_VAR, ADD_GLOBAL_VAR, ADD_MODE
+    // with equivalent member functions or constants
+};
