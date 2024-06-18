@@ -1,14 +1,13 @@
 #pragma once
 
 #include <ADCManager.h>
-#include <Adafruit_ADS1X15.h>
 #include <Arduino.h>
+#include <IORegister.h>
+#include <MCP23S17.h>
 #include <SPI.h>
 #include <crc8.h>
 #include <debugHelper.h>
 #include <pinmap.h>
-#include <registerIn.h>
-#include <registerOut.h>
 #include <sserial.h>
 
 // #define SHOW_DEBUG
@@ -26,11 +25,10 @@
 
 // Externals
 
-extern RegisterOut outRegister;
-extern RegisterIn  inRegister;
-extern ADCManager  adcManager;
-extern Debug       debug;
-extern bool        sserial_timeoutFlag;
+extern IORegister ioRegister;
+extern ADCManager adcManager;
+extern Debug      debug;
+extern bool       sserial_timeoutFlag;
 
 #define SSERIAL_CPU 1
 #define DEFAULT_CPU 0

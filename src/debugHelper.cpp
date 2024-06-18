@@ -2,6 +2,11 @@
 
 Debug::Debug() {}
 
+/**
+ * @brief Add a message to the printQueue
+ *
+ * @param format
+ */
 void Debug::addPrint(const char *format, ...) {
     char    buf[256];   // Puffer für die formatierte Zeichenkette
     va_list args;
@@ -19,6 +24,11 @@ void Debug::addPrint(const char *format, ...) {
     }
 }
 
+/**
+ * @brief Print a message directly to the serial monitor
+ *
+ * @param format
+ */
 void Debug::print(const char *format, ...) {
     char    buf[256];   // Puffer für die formatierte Zeichenkette
     va_list args;
@@ -36,6 +46,9 @@ void Debug::print(const char *format, ...) {
     }
 }
 
+/**
+ * @brief Print all elements in the printQueue
+ */
 void Debug::printQueue() {
     char element[256];
     while (uxQueueMessagesWaiting(_printQueue) > 0) {

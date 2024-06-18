@@ -26,8 +26,6 @@ class ADCManager {
 
   private:
     static void      readInputsTask(void *pvParameters);
-    Adafruit_ADS1115 adc1;   // ADC mit Adresse 0x48
-    Adafruit_ADS1115 adc2;   // ADC mit Adresse 0x49
     volatile int16_t joystickX;
     volatile int16_t joystickY;
     volatile int16_t joystickZ;
