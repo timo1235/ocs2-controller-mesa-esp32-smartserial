@@ -138,24 +138,6 @@ typedef union {
     uint8_t bytes[SSERIAL_MEM_SIZE];
 } memory_t;
 
-typedef struct {
-    process_data_descriptor_t *ptr;
-    float                      range;
-    uint32_t                   bitmax;
-} pd_metadata_t;
-
-typedef struct {
-    pd_metadata_t pos_cmd;
-    pd_metadata_t pos_fb;
-    pd_metadata_t vel_cmd;
-    pd_metadata_t vel_fb;
-    pd_metadata_t input_pins;
-    pd_metadata_t output_pins;
-    pd_metadata_t fault;
-    pd_metadata_t enable;
-    pd_metadata_t index_enable;
-    pd_metadata_t current;
-} pd_table_t;
 #pragma pack(pop)
 
 // Function Declarations
