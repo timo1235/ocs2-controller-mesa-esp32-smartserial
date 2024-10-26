@@ -55,6 +55,7 @@ class RegisterOut {
      *
      */
     union {
+        uint16_t data;
         struct {
             uint8_t firstByte;    // First byte for the first 8 outputs
             uint8_t secondByte;   // Second byte for the next 8 outputs
@@ -62,13 +63,13 @@ class RegisterOut {
 
         struct {
             uint8_t out8 : 1;
-            uint8_t out4 : 1;
-            uint8_t out3 : 1;
-            uint8_t out7 : 1;
-            uint8_t out2 : 1;
-            uint8_t out6 : 1;
             uint8_t out1 : 1;
             uint8_t out5 : 1;
+            uint8_t out2 : 1;
+            uint8_t out6 : 1;
+            uint8_t out3 : 1;
+            uint8_t out7 : 1;
+            uint8_t out4 : 1;
             uint8_t spindelOnOff : 1;
             uint8_t ena : 1;
             uint8_t out10 : 1;

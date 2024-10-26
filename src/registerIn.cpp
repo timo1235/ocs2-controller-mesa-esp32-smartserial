@@ -1,54 +1,39 @@
 #include <includes.h>
 
-RegisterIn::RegisterIn(int dataPin, int clockPin, int latchPin, int loadPin)
-    : dataPin(dataPin), clockPin(clockPin), latchPin(latchPin), loadPin(loadPin) {
+RegisterIn::RegisterIn(int dataPin, int clockPin, int latchPin, int loadPin) : dataPin(dataPin), clockPin(clockPin), latchPin(latchPin), loadPin(loadPin) {
     pinMode(dataPin, INPUT);
     pinMode(clockPin, OUTPUT);
     pinMode(latchPin, OUTPUT);
-    pinMode(REGISTER_IN_LOAD, OUTPUT);
+    pinMode(loadPin, OUTPUT);
+
+    digitalWrite(loadPin, HIGH);
+    digitalWrite(clockPin, LOW);
+    digitalWrite(latchPin, LOW);
 }
 
 void RegisterIn::updateInputs() {
-    // Setzt PL-Pin kurz auf LOW, um parallele Daten zu übertragen
-    digitalWrite(REGISTER_IN_LOAD, LOW);
-    delayMicroseconds(5);
-    digitalWrite(REGISTER_IN_LOAD, HIGH);
-    // Setzt STCP-Pin kurz auf HIGH, um Daten ins Schieberegister zu laden
-    digitalWrite(latchPin, LOW);
-    delayMicroseconds(5);
+    // Load the data into the shift register
     digitalWrite(latchPin, HIGH);
+    delayMicroseconds(1);   // Short delay to ensure the load operation is completed
+    digitalWrite(latchPin, LOW);
+    delayMicroseconds(1);   // Short delay to ensure the load operation is completed
+    digitalWrite(loadPin, LOW);
+    delayMicroseconds(1);   // Short delay to ensure the load operation is completed
+    digitalWrite(loadPin, HIGH);
 
-    // Reset Datenbytes
-    data.bytes.byte0 = 0;
-    data.bytes.byte1 = 0;
-    data.bytes.byte2 = 0;
-    data.bytes.byte3 = 0;
+    // Clear inputData
+    data.inputData = 0;
 
-    // Lesen der Daten aus allen drei Registern
-    for (int j = 0; j < 4; j++) {
-        for (int i = 0; i < 8; i++) {
-            // Ein Bit einlesen
-            int bitVal = digitalRead(dataPin);
-            switch (j) {
-            case 0:
-                data.bytes.byte0 |= (bitVal << (7 - i));
-                break;
-            case 1:
-                data.bytes.byte1 |= (bitVal << (7 - i));
-                break;
-            case 2:
-                data.bytes.byte2 |= (bitVal << (7 - i));
-                break;
-            case 3:
-                data.bytes.byte3 |= (bitVal << (7 - i));
-                break;
-            }
-
-            // Nächstes Bit vorbereiten
-            digitalWrite(clockPin, HIGH);
-            delayMicroseconds(5);
-            digitalWrite(clockPin, LOW);
+    // Read the data from the shift register
+    for (int i = 0; i < 32; i++) {
+        delayMicroseconds(1);   // Short delay to ensure stable clock signal
+        // Read the current bit
+        if (digitalRead(dataPin)) {
+            data.inputData |= (1UL << i);
         }
+        digitalWrite(clockPin, HIGH);
+        delayMicroseconds(5);   // Short delay to ensure stable clock signal
+        digitalWrite(clockPin, LOW);
     }
 }
 
@@ -68,6 +53,6 @@ void RegisterIn::inputUpdateTask(void *pvParameters) {
     for (;;) {
         registerInstance->updateInputs();
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(6));   // wait 5 ms
     }
 }

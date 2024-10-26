@@ -28,28 +28,55 @@
     #define ADS1_ADDRESS 0x48
     #define ADS2_ADDRESS 0x49
 #else
+// For devkit V1
+//     #define SSERIAL_RXD        16
+//     #define SSERIAL_TXD        17
 
+// // 74HC597 IN Shift Register
+//     #define REGISTER_IN_LATCH  4
+//     #define REGISTER_IN_CLK    5
+//     #define REGISTER_IN_DATA   27
+//     #define REGISTER_IN_LOAD   26
+
+// // 74HC595 OUT Shift Register
+//     #define REGISTER_OUT_LATCH 20
+//     #define REGISTER_OUT_CLK   20
+//     #define REGISTER_OUT_DATA  20
+
+// // ESP32 I2C from OCS2
+//     #define I2C_OCS2_SDA       20
+//     #define I2C_OCS2_SCL       20
+
+// // I2C for ADC
+//     #define I2C_SDA            20
+//     #define I2C_SCL            20
+
+// // I2C addresses for ADC
+//     #define ADS1_ADDRESS       0x48
+//     #define ADS2_ADDRESS       0x49
+
+// Version 1.1
     #define SSERIAL_RXD        16
     #define SSERIAL_TXD        17
 
 // 74HC597 IN Shift Register
-    #define REGISTER_IN_LATCH  4
-    #define REGISTER_IN_CLK    5
-    #define REGISTER_IN_DATA   27
-    #define REGISTER_IN_LOAD   26
+    #define REGISTER_IN_LATCH  27
+    #define REGISTER_IN_CLK    26
+    #define REGISTER_IN_DATA   14
+    #define REGISTER_IN_LOAD   25
 
 // 74HC595 OUT Shift Register
-    #define REGISTER_OUT_LATCH 20
-    #define REGISTER_OUT_CLK   20
-    #define REGISTER_OUT_DATA  20
+    #define REGISTER_OUT_LATCH 32
+    #define REGISTER_OUT_CLK   33
+    #define REGISTER_OUT_DATA  13
 
 // ESP32 I2C from OCS2
-    #define I2C_OCS2_SDA       20
-    #define I2C_OCS2_SCL       20
+    #define I2C_OCS2_SDA       18
+    #define I2C_OCS2_SCL       19
 
 // I2C for ADC
-    #define I2C_SDA            20
-    #define I2C_SCL            20
+    #define I2C_SDA            21
+    #define I2C_SCL            22
 
 // I2C addresses for ADC
     #define ADS1_ADDRESS       0x48

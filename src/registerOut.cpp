@@ -4,6 +4,8 @@ RegisterOut::RegisterOut(int dataPin, int clockPin, int latchPin) : dataPin(data
     pinMode(dataPin, OUTPUT);
     pinMode(clockPin, OUTPUT);
     pinMode(latchPin, OUTPUT);
+    regData.data = 0;
+    this->updateOutputs();
 }
 
 void RegisterOut::set(Output output, bool value) {
@@ -82,6 +84,6 @@ void RegisterOut::outputUpdateTask(void *pvParameters) {
     RegisterOut *registerInstance = static_cast<RegisterOut *>(pvParameters);
     for (;;) {
         registerInstance->updateOutputs();
-        vTaskDelay(pdMS_TO_TICKS(5));   // Warte 5 Millisekunden
+        vTaskDelay(pdMS_TO_TICKS(5));   // wait 5 ms
     }
 }

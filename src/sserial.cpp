@@ -298,6 +298,19 @@ void emptySerialBuffer() {
 
 void sserialLoop(void *pvParameters);
 
+uint32_t lastSerialCommunication = 0;
+
+hw_timer_t    *timer           = NULL;
+uint64_t       timerCounter    = 0;
+TaskHandle_t   mainTaskHandle  = NULL;
+volatile bool  isTaskSuspended = true;
+void IRAM_ATTR onTimer(void *arg) {
+    if (isTaskSuspended) {
+        vTaskResume(mainTaskHandle);
+        isTaskSuspended = false;   // Der Task wird jetzt fortgesetzt
+    }
+}
+
 void sserial_init() {
     Serial.println("Init SSERIAL");
 
@@ -458,20 +471,38 @@ void sserial_init() {
 
     Serial.printf("SSerial init done\n");
 
-    xTaskCreatePinnedToCore(sserialLoop,    /* Task function. */
-                            "SSerial Task", /* name of task. */
-                            10000,          /* Stack size of task */
-                            NULL,           /* parameter of the task */
-                            10,             /* priority of the task */
-                            NULL,           /* Task handle to keep track of created task */
-                            SSERIAL_CPU);
-}
+    // Erstellen Sie einen Task auf Kern 1, um den Timer einzurichten
+    xTaskCreatePinnedToCore(sserialLoop,        // Funktion, die ausgeführt werden soll
+                            "TimerSetupTask",   // Name des Tasks
+                            10000,              // Stackgröße des Tasks
+                            NULL,               // Parameter für den Task
+                            10,                 // Priorität des Tasks
+                            &mainTaskHandle,    // Task-Handle
+                            SSERIAL_CPU         // Kern, auf dem der Task ausgeführt wird (1 für Kern 1)
+    );
+    // Timer konfigurieren und starten
+    esp_timer_create_args_t timer_args;
+    timer_args.callback = &onTimer;
+    timer_args.arg      = NULL;   // Keine Argumente benötigt
+    timer_args.name     = "sserial timer";
 
-uint32_t lastSerialCommunication = 0;
+    esp_timer_handle_t timer_handle;
+    esp_timer_create(&timer_args, &timer_handle);
+    esp_timer_start_periodic(timer_handle, 100);
+
+    // xTaskCreatePinnedToCore(sserialLoop,    /* Task function. */
+    //                         "SSerial Task", /* name of task. */
+    //                         10000,          /* Stack size of task */
+    //                         NULL,           /* parameter of the task */
+    //                         10,             /* priority of the task */
+    //                         NULL,           /* Task handle to keep track of created task */
+    //                         SSERIAL_CPU);
+}
 
 void sserialLoop(void *pvParameters) {
     for (;;) {
-        auto available = Serial1.available();
+        isTaskSuspended = false;
+        auto available  = Serial1.available();
 
         if (available >= 1) {
             sserial_timeoutFlag     = false;
@@ -562,31 +593,31 @@ void sserialLoop(void *pvParameters) {
                     // data_in.in_2 = millis();
                     // data_in.in_3 = millis();
 
-                    // data_in.in_0  = inRegister.data.bits.alarmAll;
-                    // data_in.in_1  = inRegister.data.bits.in1;
-                    // data_in.in_2  = inRegister.data.bits.in2;
-                    // data_in.in_3  = inRegister.data.bits.in3;
-                    // data_in.in_4  = inRegister.data.bits.in4;
-                    // data_in.in_5  = inRegister.data.bits.in5;
-                    // data_in.in_6  = inRegister.data.bits.in6;
-                    // data_in.in_7  = inRegister.data.bits.in7;
-                    // data_in.in_8  = inRegister.data.bits.in8;
-                    // data_in.in_9  = inRegister.data.bits.in9;
-                    // data_in.in_10 = inRegister.data.bits.in10;
-                    // data_in.in_11 = inRegister.data.bits.in11;
-                    // data_in.in_12 = inRegister.data.bits.in12;
-                    // data_in.in_13 = inRegister.data.bits.in13;
-                    // data_in.in_14 = inRegister.data.bits.in14;
-                    // data_in.in_15 = inRegister.data.bits.in15;
-                    // data_in.in_16 = inRegister.data.bits.in16;
-                    // data_in.in_17 = inRegister.data.bits.programmStart;
-                    // data_in.in_18 = inRegister.data.bits.motorStart;
-                    // data_in.in_19 = inRegister.data.bits.ok;
-                    // data_in.in_20 = inRegister.data.bits.auswahlX;
-                    // data_in.in_21 = inRegister.data.bits.auswahlY;
-                    // data_in.in_22 = inRegister.data.bits.auswahlZ;
-                    // data_in.in_23 = inRegister.data.bits.speed1;
-                    // data_in.in_24 = inRegister.data.bits.speed2;
+                    data_in.in_0     = inRegister.data.bits.alarmAll;
+                    data_in.in_1     = inRegister.data.bits.in1;
+                    data_in.in_2     = inRegister.data.bits.in2;
+                    data_in.in_3     = inRegister.data.bits.in3;
+                    data_in.in_4     = inRegister.data.bits.in4;
+                    data_in.in_5     = inRegister.data.bits.in5;
+                    data_in.in_6     = inRegister.data.bits.in6;
+                    data_in.in_7     = inRegister.data.bits.in7;
+                    data_in.in_8     = inRegister.data.bits.in8;
+                    data_in.in_9     = inRegister.data.bits.in9;
+                    data_in.in_10    = inRegister.data.bits.in10;
+                    data_in.in_11    = inRegister.data.bits.in11;
+                    data_in.in_12    = inRegister.data.bits.in12;
+                    data_in.in_13    = inRegister.data.bits.in13;
+                    data_in.in_14    = inRegister.data.bits.in14;
+                    data_in.in_15    = inRegister.data.bits.in15;
+                    data_in.in_16    = inRegister.data.bits.in16;
+                    data_in.in_17    = inRegister.data.bits.programmStart;
+                    data_in.in_18    = inRegister.data.bits.motorStart;
+                    data_in.in_19    = inRegister.data.bits.ok;
+                    data_in.in_20    = inRegister.data.bits.auswahlX;
+                    data_in.in_21    = inRegister.data.bits.auswahlY;
+                    data_in.in_22    = inRegister.data.bits.auswahlZ;
+                    data_in.in_23    = inRegister.data.bits.speed1;
+                    data_in.in_24    = inRegister.data.bits.speed2;
                     data_in.joy_x    = adcManager.getJoystickX();
                     data_in.joy_y    = adcManager.getJoystickY();
                     data_in.joy_z    = adcManager.getJoystickZ();
@@ -630,24 +661,25 @@ void sserialLoop(void *pvParameters) {
 
                     // send
                     txbuf[discovery.input] = crc8((uint8_t *) txbuf, discovery.input);
+                    emptySerialBuffer();
                     send(discovery.input, 1);
                     // set output pins
-                    // outRegister.set(RegisterOut::Output::ena, data_out.out_0);
-                    // outRegister.set(RegisterOut::Output::out1, data_out.out_1);
-                    // outRegister.set(RegisterOut::Output::out2, data_out.out_2);
-                    // outRegister.set(RegisterOut::Output::out3, data_out.out_3);
-                    // outRegister.set(RegisterOut::Output::out4, data_out.out_4);
-                    // outRegister.set(RegisterOut::Output::out5, data_out.out_5);
-                    // outRegister.set(RegisterOut::Output::out6, data_out.out_6);
-                    // outRegister.set(RegisterOut::Output::out7, data_out.out_7);
-                    // outRegister.set(RegisterOut::Output::out8, data_out.out_8);
-                    // outRegister.set(RegisterOut::Output::spindelOnOff, data_out.out_9);
-                    // outRegister.set(RegisterOut::Output::out10, data_out.out_10);
-                    // outRegister.set(RegisterOut::Output::out11, data_out.out_11);
-                    // outRegister.set(RegisterOut::Output::out12, data_out.out_12);
-                    // outRegister.set(RegisterOut::Output::out13, data_out.out_13);
-                    // outRegister.set(RegisterOut::Output::out14, data_out.out_14);
-                    // outRegister.set(RegisterOut::Output::out15, data_out.out_15);
+                    outRegister.set(RegisterOut::Output::ena, data_out.out_0);
+                    outRegister.set(RegisterOut::Output::out1, data_out.out_1);
+                    outRegister.set(RegisterOut::Output::out2, data_out.out_2);
+                    outRegister.set(RegisterOut::Output::out3, data_out.out_3);
+                    outRegister.set(RegisterOut::Output::out4, data_out.out_4);
+                    outRegister.set(RegisterOut::Output::out5, data_out.out_5);
+                    outRegister.set(RegisterOut::Output::out6, data_out.out_6);
+                    outRegister.set(RegisterOut::Output::out7, data_out.out_7);
+                    outRegister.set(RegisterOut::Output::out8, data_out.out_8);
+                    outRegister.set(RegisterOut::Output::spindelOnOff, data_out.out_9);
+                    outRegister.set(RegisterOut::Output::out10, data_out.out_10);
+                    outRegister.set(RegisterOut::Output::out11, data_out.out_11);
+                    outRegister.set(RegisterOut::Output::out12, data_out.out_12);
+                    outRegister.set(RegisterOut::Output::out13, data_out.out_13);
+                    outRegister.set(RegisterOut::Output::out14, data_out.out_14);
+                    outRegister.set(RegisterOut::Output::out15, data_out.out_15);
                 }
             } else if (lbp.ct == CT_RW && lbp.wr == 0) {   // read
                 // size = 1 + 2*lbp.as  + 1
@@ -702,8 +734,8 @@ void sserialLoop(void *pvParameters) {
                 }
             } else {
                 // TODO: handle unkown packet
+                emptySerialBuffer();
             }
-            emptySerialBuffer();
         }
         if (millis() - lastSerialCommunication > 5000 && !sserial_timeoutFlag) {
             debug.print("SSerial timeout");
@@ -712,4 +744,6 @@ void sserialLoop(void *pvParameters) {
         }
     }
     // taskYIELD();
+    isTaskSuspended = true;
+    vTaskSuspend(NULL);
 }
