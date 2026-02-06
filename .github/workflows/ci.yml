@@ -12,6 +12,35 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────
+  # Job 0: Native Tests (kein Board noetig)
+  # ──────────────────────────────────────────────
+  native-tests:
+    name: Native Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            .pio/build_cache
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-native-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Run native tests
+        run: pio test -e native --verbose
+
+  # ──────────────────────────────────────────────
   # Job 1: Build firmware
   # ──────────────────────────────────────────────
   build:
@@ -153,7 +182,7 @@ jobs:
   # ──────────────────────────────────────────────
   release:
     name: Release
-    needs: [build, static-analysis]
+    needs: [native-tests, build, static-analysis]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
