@@ -52,6 +52,9 @@ void processIncomingData() {
         ((uint8_t *) (&data_out))[i] = (uint8_t) byte;
     }
 
+    // Consume host CRC byte (LBP spec: CRC appended to all commands)
+    Serial1.read();
+
     txbuf[0] = read_error ? 0x01 : 0x00;
     for (int i = 0; i < (discovery.input - 1); i++) {
         txbuf[i + 1] = ((uint8_t *) (&data_in))[i];
