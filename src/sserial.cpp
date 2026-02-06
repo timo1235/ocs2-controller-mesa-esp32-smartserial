@@ -1,20 +1,55 @@
 #include "sserial.h"
+#include "sserial_internal.h"
 #include "crc8.h"
+#include <esp_task_wdt.h>
 #include <includes.h>
 #include <string.h>
 
-static volatile uint8_t rxbuf[128];
-static volatile uint8_t txbuf[128];
-static uint16_t         address;
-static int              rxpos;
-static uint32_t         timeout;
-static lbp_t            lbp;
-static const char       name[] = LBPCardName;
-static unit_no_t        unit;
-static uint32_t         max_waste_ticks;
-static uint32_t         block_bytes;
-static memory_t         memory;
-static uint8_t         *heap_ptr;
+// --- Init-only macros (depend on static memory variable) ---
+#define MEMPTR(p) ((uint32_t) & p - (uint32_t) & memory)
+
+#define IS_INPUT(pdr)  (pdr->data_direction != DATA_DIRECTION_OUTPUT)
+#define IS_OUTPUT(pdr) (pdr->data_direction == DATA_DIRECTION_OUTPUT)
+
+#define INDIRECT_PD(pd_ptr) ((process_data_descriptor_t *) (memory.bytes + *pd_ptr))
+#define DATA_DIR(pd_ptr)    INDIRECT_PD(pd_ptr)->data_direction
+#define DATA_SIZE(pd_ptr)   INDIRECT_PD(pd_ptr)->data_size
+
+#define ADD_PROCESS_VAR(args)                                                                                                              \
+    *ptocp = add_pd args;                                                                                                                  \
+    if (*ptocp == 0) {                                                                                                                     \
+        Serial.println("FATAL: add_pd failed, memory exhausted");                                                                          \
+        return;                                                                                                                            \
+    }                                                                                                                                      \
+    input_bits += IS_INPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                     \
+    output_bits += IS_OUTPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                   \
+    ptocp++
+
+#define ADD_GLOBAL_VAR(args)                                                                                                               \
+    *gtocp = add_pd args;                                                                                                                  \
+    if (*gtocp == 0) {                                                                                                                     \
+        Serial.println("FATAL: add_pd failed, memory exhausted");                                                                          \
+        return;                                                                                                                            \
+    }                                                                                                                                      \
+    gtocp++
+
+#define ADD_MODE(args)                                                                                                                     \
+    *gtocp = add_mode args;                                                                                                                \
+    if (*gtocp == 0) {                                                                                                                     \
+        Serial.println("FATAL: add_mode failed, memory exhausted");                                                                        \
+        return;                                                                                                                            \
+    }                                                                                                                                      \
+    gtocp++
+
+// --- Shared state definitions ---
+volatile uint8_t txbuf[128];
+uint16_t         address;
+lbp_t            lbp;
+const char       name[] = LBPCardName;
+unit_no_t        unit;
+static memory_t  memory;
+static uint8_t  *heap_ptr;
+static uint8_t  *heap_end;
 
 uint8_t sserial_slave[] = {
     0x0A, 0x02, 0xA3, 0x04, 0xF9, 0x04, 0x00, 0x00,   // 0..7
@@ -179,6 +214,8 @@ uint8_t sserial_slave[] = {
     0x00, 0x5E, 0x04, 0x00, 0x00,
 };
 
+const size_t sserial_slave_size = sizeof(sserial_slave);
+
 const discovery_rpc_t discovery = {
     .input  = 10,
     .output = 2,
@@ -186,69 +223,10 @@ const discovery_rpc_t discovery = {
     .gtocp  = 0x04F9,
 };
 
-typedef struct {
-    uint32_t out1 : 1;
-    uint32_t out2 : 1;
-    uint32_t out3 : 1;
-    uint32_t out4 : 1;
-    uint32_t out5 : 1;
-    uint32_t out6 : 1;
-    uint32_t out7 : 1;
-    uint32_t out8 : 1;
-    uint32_t ena : 1;
-    uint32_t spindel : 1;
-    uint32_t padding : 6;
-} sserial_out_process_data_t;   // size:2 bytes
+sserial_out_process_data_t data_out;
+sserial_in_process_data_t  data_in;
 
-typedef struct {
-    int8_t   joy_x;
-    int8_t   joy_y;
-    int8_t   joy_z;
-    uint8_t  feedrate;
-    uint8_t  rotation;
-    uint32_t in1 : 1;
-    uint32_t in2 : 1;
-    uint32_t in3 : 1;
-    uint32_t in4 : 1;
-    uint32_t in5 : 1;
-    uint32_t in6 : 1;
-    uint32_t in7 : 1;
-    uint32_t in8 : 1;
-    uint32_t in9 : 1;
-    uint32_t in10 : 1;
-    uint32_t in11 : 1;
-    uint32_t in12 : 1;
-    uint32_t in13 : 1;
-    uint32_t in14 : 1;
-    uint32_t in15 : 1;
-    uint32_t in16 : 1;
-    uint32_t alarm : 1;
-    uint32_t ok : 1;
-    uint32_t motorstart : 1;
-    uint32_t programmstart : 1;
-    uint32_t auswahlx : 1;
-    uint32_t auswahly : 1;
-    uint32_t auswahlz : 1;
-    uint32_t speed1 : 1;
-    uint32_t speed2 : 1;
-    uint32_t padding : 7;
-} sserial_in_process_data_t;   // size:9 bytes
-
-#define scale_address 300
-
-static sserial_out_process_data_t data_out;
-static sserial_in_process_data_t  data_in;
-
-TaskHandle_t sserialTaskHandle;
-
-static uint8_t crc_request(uint8_t len) {
-    uint8_t crc = crc8_init();
-    for (int i = rxpos; i < rxpos + len; i++) {
-        crc = crc8_update(crc, (void *) &rxbuf[i % sizeof(rxbuf)], 1);
-    }
-    crc = crc8_finalize(crc);
-    return crc == rxbuf[(rxpos + len) % sizeof(rxbuf)];
-}
+// --- Utility functions ---
 
 static uint8_t calculate_crc8(uint8_t *addr, uint8_t len) {
     uint8_t crc = crc8_init();
@@ -256,8 +234,42 @@ static uint8_t calculate_crc8(uint8_t *addr, uint8_t len) {
     return crc8_finalize(crc);
 }
 
-uint16_t add_pd(const char *name_string, const char *unit_string, uint8_t data_size_in_bits, uint8_t data_type, uint8_t data_dir,
-                float param_min, float param_max) {
+void send(uint8_t len, uint8_t docrc) {
+    if (docrc) {
+        txbuf[len] = calculate_crc8((uint8_t *) txbuf, len);
+    }
+    Serial1.write(const_cast<uint8_t *>(txbuf), len + docrc);
+}
+
+void emptySerialBuffer() {
+    while (Serial1.available()) {
+        Serial1.read();
+    }
+}
+
+// --- Heap management (used only during init) ---
+
+static size_t heap_remaining() { return (heap_ptr < heap_end) ? (size_t)(heap_end - heap_ptr) : 0; }
+
+static bool heap_copy_string(const char *str) {
+    size_t len = strlen(str) + 1;
+    if (len > heap_remaining()) {
+        Serial.println("ERROR: sserial memory exhausted");
+        return false;
+    }
+    memcpy(heap_ptr, str, len);
+    heap_ptr += len;
+    return true;
+}
+
+static uint16_t add_pd(const char *name_string, const char *unit_string, uint8_t data_size_in_bits, uint8_t data_type, uint8_t data_dir,
+                       float param_min, float param_max) {
+    size_t needed = NUM_BYTES(data_size_in_bits) + 4 + sizeof(process_data_descriptor_t) + strlen(unit_string) + 1 + strlen(name_string) + 1;
+    if (needed > heap_remaining()) {
+        Serial.println("ERROR: sserial memory exhausted in add_pd");
+        return 0;
+    }
+
     process_data_descriptor_t pdr;
     pdr.record_type    = RECORD_TYPE_PROCESS_DATA_RECORD;
     pdr.data_size      = data_size_in_bits;
@@ -277,16 +289,19 @@ uint16_t add_pd(const char *name_string, const char *unit_string, uint8_t data_s
 
     heap_ptr = (uint8_t *) &(((process_data_descriptor_t *) heap_ptr)->names);
 
-    strcpy((char *) heap_ptr, unit_string);
-    heap_ptr += strlen(unit_string) + 1;
-
-    strcpy((char *) heap_ptr, name_string);
-    heap_ptr += strlen(name_string) + 1;
+    heap_copy_string(unit_string);
+    heap_copy_string(name_string);
 
     return pd_ptr;
 }
 
-uint16_t add_mode(const char *name_string, uint8_t index, uint8_t type) {
+static uint16_t add_mode(const char *name_string, uint8_t index, uint8_t type) {
+    size_t needed = sizeof(mode_descriptor_t) + strlen(name_string) + 1;
+    if (needed > heap_remaining()) {
+        Serial.println("ERROR: sserial memory exhausted in add_mode");
+        return 0;
+    }
+
     mode_descriptor_t mdr;
     mdr.record_type = RECORD_TYPE_MODE_DATA_RECORD;
     mdr.index       = index;
@@ -298,13 +313,12 @@ uint16_t add_mode(const char *name_string, uint8_t index, uint8_t type) {
 
     heap_ptr = (uint8_t *) &(((mode_descriptor_t *) heap_ptr)->names);
 
-    strcpy((char *) heap_ptr, name_string);
-    heap_ptr += strlen(name_string) + 1;
+    heap_copy_string(name_string);
 
     return md_ptr;
 }
 
-void print_pd(process_data_descriptor_t *pd) {
+static void print_pd(process_data_descriptor_t *pd) {
     int   strl = strlen(&pd->names);
     char *unit = &pd->names;
     char *name = &pd->names + strl + 1;
@@ -349,19 +363,7 @@ void print_pd(process_data_descriptor_t *pd) {
     }
 }
 
-static void send(uint8_t len, uint8_t docrc) {
-    timeout = 0;
-    if (docrc) {
-        txbuf[len] = calculate_crc8((uint8_t *) txbuf, len);
-    }
-    Serial1.write(const_cast<uint8_t *>(txbuf), len + docrc);
-}
-
-void emptySerialBuffer() {
-    while (Serial1.available()) {
-        Serial1.read();
-    }
-}
+// --- Init ---
 
 void sserialLoop(void *pvParameters);
 
@@ -369,6 +371,7 @@ void sserial_init() {
     Serial.println("Init SSERIAL");
 
     heap_ptr = memory.heap;
+    heap_end = memory.bytes + SSERIAL_MEM_SIZE;
 
     uint16_t input_bits  = 8;
     uint16_t output_bits = 0;
@@ -376,11 +379,9 @@ void sserial_init() {
     uint16_t ptoc[64];
     uint16_t gtoc[64];
 
-    uint16_t                  *ptocp = ptoc;
-    uint16_t                  *gtocp = gtoc;
-    process_data_descriptor_t *last_pd;
+    uint16_t *ptocp = ptoc;
+    uint16_t *gtocp = gtoc;
 
-    // ADD_PROCESS_VAR(("out", "none", 16, DATA_TYPE_BITS, DATA_DIRECTION_OUTPUT, -100, 100));
     ADD_PROCESS_VAR(("out1", "none", 1, DATA_TYPE_BITS, DATA_DIRECTION_OUTPUT, 0, 1));
     ADD_PROCESS_VAR(("out2", "none", 1, DATA_TYPE_BITS, DATA_DIRECTION_OUTPUT, 0, 1));
     ADD_PROCESS_VAR(("out3", "none", 1, DATA_TYPE_BITS, DATA_DIRECTION_OUTPUT, 0, 1));
@@ -451,7 +452,7 @@ void sserial_init() {
 
     unit.unit = 0x04030201;
 
-    // Insert print code here
+    // Debug output: print descriptor table for verification
     Serial.printf("gtoc:%u\n", memory.discovery.gtocp);
     Serial.printf("ptoc:%u\n", memory.discovery.ptocp);
     Serial.printf("%i\n", sizeof(memory_t));
@@ -459,7 +460,6 @@ void sserial_init() {
     int nl = 0;
     Serial.printf("uint8_t sserial_slave[] = {\n");
     for (int i = 0; i < MEMPTR(*heap_ptr); i++) {
-        // Serial.printf("%u %c\n",memory.bytes[i],memory.bytes[i]);
         Serial.printf("0x%02X,", memory.bytes[i]);
         nl++;
         if (nl > 7) {
@@ -481,12 +481,10 @@ void sserial_init() {
     gtocp = (uint16_t *) (memory.bytes + memory.discovery.gtocp);
     while (*ptocp != 0x0000) {
         process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *ptocp++);
-        // Serial.printf("0x%02X\n",pd->data_direction);
         if ((pd->data_direction == DATA_DIRECTION_OUTPUT || pd->data_direction == DATA_DIRECTION_BI_DIRECTIONAL) &&
             pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
             print_pd(pd);
         }
-        // Serial.printf("pd has data at %x with value %x\n", pd->data_addr, MEMU16(pd->data_addr));
     }
     Serial.printf("} sserial_out_process_data_t; //size:%u bytes\n", memory.discovery.output);
     Serial.printf("\n");
@@ -494,12 +492,10 @@ void sserial_init() {
     ptocp = (uint16_t *) (memory.bytes + memory.discovery.ptocp);
     while (*ptocp != 0x0000) {
         process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *ptocp++);
-        // Serial.printf("0x%02X\n",pd->data_direction);
         if ((pd->data_direction == DATA_DIRECTION_INPUT || pd->data_direction == DATA_DIRECTION_BI_DIRECTIONAL) &&
             pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
             print_pd(pd);
         }
-        // Serial.printf("pd has data at %x with value %x\n", pd->data_addr, MEMU16(pd->data_addr));
     }
     Serial.printf("} sserial_in_process_data_t; //size:%u bytes\n", memory.discovery.input - 1);
     gtocp = (uint16_t *) (memory.bytes + memory.discovery.gtocp);
@@ -514,13 +510,18 @@ void sserial_init() {
         }
     }
 
+    esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
     xTaskCreatePinnedToCore(sserialLoop, "SSerial Task", 10000, NULL, 10, NULL, SSERIAL_CPU);
 }
 
-uint32_t lastSerialCommunication = 0;
+// --- Main loop ---
+
+static uint32_t lastSerialCommunication = 0;
 
 void sserialLoop(void *pvParameters) {
+    esp_task_wdt_add(NULL);
     for (;;) {
+        esp_task_wdt_reset();
         auto available = Serial1.available();
 
         if (available >= 1) {
@@ -550,236 +551,23 @@ void sserialLoop(void *pvParameters) {
                 debug.addPrint(
                     "Unknown: Available: %lu, byte: 0x%02X lbp: ct: %d, wr: %d, ai: %d, as: %d, ds: %d, rid: %d, rpc: %d, dummy: %d",
                     available, lbp.byte, lbp.ct, lbp.wr, lbp.ai, lbp.as, lbp.ds, lbp.rid, lbp.rpc, lbp.dummy);
+                emptySerialBuffer();
             }
-            emptySerialBuffer();
         }
         checkForTimeout();
     }
 }
 
-void handleLocalRead(uint8_t available) {
-    if (available >= 2) {
-        emptySerialBuffer();
-        switch (lbp.byte) {
-        case LBPCookieCMD:
-            txbuf[0] = LBPCookie;
-            break;
-        case LBPStatusCMD:
-            txbuf[0] = 0x00;
-            break;
-        case LBPCardName0Cmd ... LBPCardName3Cmd:
-            txbuf[0] = name[lbp.byte - LBPCardName0Cmd];
-            break;
-        default:
-            txbuf[0] = 0x00;
-        }
-        send(1, 1);
-    }
-}
-
-void handleLocalWrite(uint8_t available) {
-    emptySerialBuffer();
-    if (lbp.byte == 0xFF || lbp.byte == 0xFC) {
-        rxpos += 1;
-    } else if (available >= 3) {
-        txbuf[0] = 0x00;
-        send(1, 0);
-    }
-}
-
-void handleRpc(uint8_t available) {
-    if (lbp.byte == UnitNumberRPC && available >= 2) {
-        emptySerialBuffer();
-        txbuf[0] = unit.byte[0];
-        txbuf[1] = unit.byte[1];
-        txbuf[2] = unit.byte[2];
-        txbuf[3] = unit.byte[3];
-        send(4, 1);
-    } else if (lbp.byte == DiscoveryRPC && available >= 2) {
-        emptySerialBuffer();
-        memcpy((void *) txbuf, ((uint8_t *) &discovery), sizeof(discovery));
-        send(sizeof(discovery), 1);
-    } else if (lbp.byte == ProcessDataRPC && available >= discovery.output + 2 - block_bytes) {
-        processDataInputs();
-        processIncomingData();
-        updateOutputPins();
-    }
-}
-
-void handleRead(uint8_t available) {
-    int size = 2 * lbp.as + 2;
-    if (available >= size) {
-        if (lbp.as) {
-            const uint8_t first  = Serial1.read();
-            const uint8_t second = Serial1.read();
-            address              = first + (second << 8);
-        }
-        emptySerialBuffer();
-        memcpy((void *) txbuf, &sserial_slave[address], (1 << lbp.ds));
-        send((1 << lbp.ds), 1);
-        if (lbp.ai) {
-            address += (1 << lbp.ds);
-        }
-    }
-}
-
-void handleWrite(uint8_t available) {
-    int size = 2 * lbp.as + (1 << lbp.ds) + 2;
-    if (available >= size) {
-        if (lbp.as) {
-            const uint8_t first  = Serial1.read();
-            const uint8_t second = Serial1.read();
-            address              = first + (second << 8);
-        }
-        if ((address + (1 << lbp.ds)) < ARRAY_SIZE(sserial_slave)) {
-            for (int i = 0; i < (1 << lbp.ds); i++) {
-                sserial_slave[address + i] = Serial1.read();
-            }
-        }
-        float tmp;
-        memcpy(&tmp, &sserial_slave[scale_address], 4);
-        if (lbp.ai) {
-            address += (1 << lbp.ds);
-        }
-    }
-}
-
-void processDataInputs() {
-    data_in.in1           = ioRegister.mcp0Data.bits.in1;
-    data_in.in2           = ioRegister.mcp0Data.bits.in2;
-    data_in.in3           = ioRegister.mcp0Data.bits.in3;
-    data_in.in4           = ioRegister.mcp0Data.bits.in4;
-    data_in.in5           = ioRegister.mcp0Data.bits.in5;
-    data_in.in6           = ioRegister.mcp0Data.bits.in6;
-    data_in.in7           = ioRegister.mcp0Data.bits.in7;
-    data_in.in8           = ioRegister.mcp0Data.bits.in8;
-    data_in.in9           = ioRegister.mcp0Data.bits.in9;
-    data_in.in10          = ioRegister.mcp0Data.bits.in10;
-    data_in.in11          = ioRegister.mcp0Data.bits.in11;
-    data_in.in12          = ioRegister.mcp0Data.bits.in12;
-    data_in.in13          = ioRegister.mcp0Data.bits.in13;
-    data_in.in14          = ioRegister.mcp0Data.bits.in14;
-    data_in.in15          = ioRegister.mcp0Data.bits.in15;
-    data_in.in16          = ioRegister.mcp0Data.bits.in16;
-    data_in.ok            = ioRegister.mcp1Data.bits.OK;
-    data_in.motorstart    = ioRegister.mcp1Data.bits.motorStart;
-    data_in.programmstart = ioRegister.mcp1Data.bits.programmStart;
-    data_in.auswahlx      = ioRegister.mcp1Data.bits.auswahlX;
-    data_in.auswahly      = ioRegister.mcp1Data.bits.auswahlY;
-    data_in.auswahlz      = ioRegister.mcp1Data.bits.auswahlZ;
-    data_in.speed1        = ioRegister.mcp1Data.bits.speed1;
-    data_in.speed2        = ioRegister.mcp1Data.bits.speed2;
-    data_in.alarm         = ioRegister.mcp1Data.bits.alarmAll;
-
-    data_in.joy_x    = map(adcManager.getJoystickX(), 0, 4095, -127, 127);
-    data_in.joy_y    = map(adcManager.getJoystickY(), 0, 4095, -127, 127);
-    data_in.joy_z    = map(adcManager.getJoystickZ(), 0, 4095, -127, 127);
-    data_in.feedrate = map(adcManager.getFeedrate(), 0, 4095, 0, 255);
-    data_in.rotation = map(adcManager.getRotationSpeed(), 0, 4095, 0, 255);
-}
-
-void processIncomingData() {
-    for (int i = 0; i < discovery.output; i++) {
-        ((uint8_t *) (&data_out))[i] = Serial1.read();
-    }
-
-    txbuf[0] = 0x00;
-    for (int i = 0; i < (discovery.input - 1); i++) {
-        txbuf[i + 1] = ((uint8_t *) (&data_in))[i];
-    }
-    txbuf[discovery.input] = calculate_crc8((uint8_t *) txbuf, discovery.input);
-    send(discovery.input, 1);
-}
-
-void updateOutputPins() {
-    ioRegister.setOutput(OutputPin::ENA, data_out.ena);
-    ioRegister.setOutput(OutputPin::OUT1, data_out.out1);
-    ioRegister.setOutput(OutputPin::OUT2, data_out.out2);
-    ioRegister.setOutput(OutputPin::OUT3, data_out.out3);
-    ioRegister.setOutput(OutputPin::OUT4, data_out.out4);
-    ioRegister.setOutput(OutputPin::OUT5, data_out.out5);
-    ioRegister.setOutput(OutputPin::OUT6, data_out.out6);
-    ioRegister.setOutput(OutputPin::OUT7, data_out.out7);
-    ioRegister.setOutput(OutputPin::OUT8, data_out.out8);
-    ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, data_out.spindel);
-
-    // ioRegister.setOutput(OutputPin::OUT2, data_out.out_2);
-    // ioRegister.setOutput(OutputPin::OUT3, data_out.out_3);
-    // ioRegister.setOutput(OutputPin::OUT4, data_out.out_4);
-    // ioRegister.setOutput(OutputPin::OUT5, data_out.out_5);
-    // ioRegister.setOutput(OutputPin::OUT6, data_out.out_6);
-    // ioRegister.setOutput(OutputPin::OUT7, data_out.out_7);
-    // ioRegister.setOutput(OutputPin::OUT8, data_out.out_8);
-    // ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, data_out.out_9);
-}
+// --- Timeout handling ---
 
 void checkForTimeout() {
-    if (millis() - lastSerialCommunication > 5000 && !sserial_timeoutFlag) {
-        debug.print("SSerial timeout");
-        debug.printQueue();
-        sserial_timeoutFlag = true;
+    if (millis() - lastSerialCommunication > SSERIAL_TIMEOUT_MS) {
+        if (!sserial_timeoutFlag) {
+            debug.print("SSerial timeout - entering safe state");
+            sserial_timeoutFlag = true;
+            safeState();
+        }
+        // Recovery: clear buffer so we can respond to new discovery
+        emptySerialBuffer();
     }
 }
-
-// Print code
-// Serial.printf("gtoc:%u\n", memory.discovery.gtocp);
-// Serial.printf("ptoc:%u\n", memory.discovery.ptocp);
-// Serial.printf("%i\n", sizeof(memory_t));
-// Serial.printf("%u\n", MEMPTR(*heap_ptr));
-// int nl = 0;
-// Serial.printf("uint8_t sserial_slave[] = {\n");
-// for (int i = 0; i < MEMPTR(*heap_ptr); i++) {
-//     // Serial.printf("%u %c\n",memory.bytes[i],memory.bytes[i]);
-//     Serial.printf("0x%02X,", memory.bytes[i]);
-//     nl++;
-//     if (nl > 7) {
-//         nl = 0;
-//         Serial.printf("// %i..%i\n", i - 7, i);
-//     }
-// }
-// Serial.printf("\n};\n\n");
-
-// Serial.printf("const discovery_rpc_t discovery = {\n");
-// Serial.printf("  .input = %u,\n", memory.discovery.input);
-// Serial.printf("  .output = %u,\n", memory.discovery.output);
-// Serial.printf("  .ptocp = 0x%04X,\n", memory.discovery.ptocp);
-// Serial.printf("  .gtocp = 0x%04X,\n", memory.discovery.gtocp);
-// Serial.printf("};\n\n");
-
-// Serial.printf("typedef struct {\n");
-// ptocp = (uint16_t *) (memory.bytes + memory.discovery.ptocp);
-// gtocp = (uint16_t *) (memory.bytes + memory.discovery.gtocp);
-// while (*ptocp != 0x0000) {
-//     process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *ptocp++);
-//     // Serial.printf("0x%02X\n",pd->data_direction);
-//     if ((pd->data_direction == DATA_DIRECTION_OUTPUT || pd->data_direction == DATA_DIRECTION_BI_DIRECTIONAL) &&
-//         pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
-//         print_pd(pd);
-//     }
-//     // Serial.printf("pd has data at %x with value %x\n", pd->data_addr, MEMU16(pd->data_addr));
-// }
-// Serial.printf("} sserial_out_process_data_t; //size:%u bytes\n", memory.discovery.output);
-// Serial.printf("\n");
-// Serial.printf("typedef struct {\n");
-// ptocp = (uint16_t *) (memory.bytes + memory.discovery.ptocp);
-// while (*ptocp != 0x0000) {
-//     process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *ptocp++);
-//     // Serial.printf("0x%02X\n",pd->data_direction);
-//     if ((pd->data_direction == DATA_DIRECTION_INPUT || pd->data_direction == DATA_DIRECTION_BI_DIRECTIONAL) &&
-//         pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
-//         print_pd(pd);
-//     }
-//     // Serial.printf("pd has data at %x with value %x\n", pd->data_addr, MEMU16(pd->data_addr));
-// }
-// Serial.printf("} sserial_in_process_data_t; //size:%u bytes\n", memory.discovery.input - 1);
-// gtocp = (uint16_t *) (memory.bytes + memory.discovery.gtocp);
-// while (*gtocp != 0x0000) {
-//     process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *gtocp++);
-//     if (pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
-//         int   strl = strlen(&pd->names);
-//         char *unit = &pd->names;
-//         char *name = &pd->names + strl + 1;
-//         Serial.printf("//global name:%s addr:0x%x size:%i dir:0x%x\n", name, pd->data_addr, pd->data_size, pd->data_direction);
-//         Serial.printf("#define %s_address %i\n", name, pd->data_addr);
-//     }
-// }

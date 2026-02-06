@@ -1,4 +1,6 @@
 #include <includes.h>
+#include <MCP23S17.h>
+#include <SPI.h>
 
 MCP23S17 MCP0(15, 0, &SPI);
 MCP23S17 MCP1(15, 1, &SPI);
@@ -6,30 +8,53 @@ MCP23S17 MCP2(15, 2, &SPI);
 
 volatile bool IORegister::mcp0InterruptFlag = true;
 volatile bool IORegister::mcp1InterruptFlag = true;
-uint16_t      IORegister::outputStatus      = 0x0000;
 
-IORegister::IORegister() : localOutputStatus(0x0000) {}
+IORegister::IORegister()
+    : _inputSnapshot{}, _inputMux(portMUX_INITIALIZER_UNLOCKED), _pendingOutput(0), _currentOutput(0),
+      _outputMux(portMUX_INITIALIZER_UNLOCKED) {}
 
 void IORegister::updateInputs() {
+    bool readMcp0 = false;
+    bool readMcp1 = false;
+    uint16_t mcp0Raw = 0;
+    uint16_t mcp1Raw = 0;
+
     if (mcp0InterruptFlag) {
-        Serial.println("MCP0 Interrupt");
-        mcp0InterruptFlag  = false;
-        mcp0Data.inputData = MCP0.read16();
+        mcp0InterruptFlag = false;
+        mcp0Raw = MCP0.read16();
+        readMcp0 = true;
     }
     if (mcp1InterruptFlag) {
-        Serial.println("MCP1 Interrupt");
-        mcp1InterruptFlag  = false;
-        mcp1Data.inputData = MCP1.read16();
+        mcp1InterruptFlag = false;
+        mcp1Raw = MCP1.read16();
+        readMcp1 = true;
+    }
+
+    if (readMcp0 || readMcp1) {
+        portENTER_CRITICAL(&_inputMux);
+        if (readMcp0) _inputSnapshot.mcp0.raw = mcp0Raw;
+        if (readMcp1) _inputSnapshot.mcp1.raw = mcp1Raw;
+        portEXIT_CRITICAL(&_inputMux);
     }
 }
 
+InputSnapshot IORegister::getInputSnapshot() {
+    InputSnapshot snapshot;
+    portENTER_CRITICAL(&_inputMux);
+    snapshot = _inputSnapshot;
+    portEXIT_CRITICAL(&_inputMux);
+    return snapshot;
+}
+
 void IORegister::setOutput(OutputPin pin, uint8_t value) {
-    uint16_t mask = 1 << pin;   // Shift the bit to the correct position
+    portENTER_CRITICAL(&_outputMux);
+    uint16_t mask = 1 << pin;
     if (value == HIGH) {
-        localOutputStatus |= mask;
+        _pendingOutput |= mask;
     } else {
-        localOutputStatus &= ~mask;
+        _pendingOutput &= ~mask;
     }
+    portEXIT_CRITICAL(&_outputMux);
 }
 
 void IORegister::init() {
@@ -58,10 +83,7 @@ void IORegister::init() {
 
     MCP0.enableInterrupt16(0xFFFF, CHANGE);
     MCP1.enableInterrupt16(0xFFFF, CHANGE);
-    // MCP1.enableInterrupt(0, CHANGE);
-    // MCP1.enableInterrupt(1, CHANGE);
 
-    outputStatus = 0x0000;   // Initialize the output status
     xTaskCreatePinnedToCore(IORegister::outputUpdateTask, "OutputUpdateTask", 4096, this, 1, NULL, DEFAULT_CPU);
     xTaskCreatePinnedToCore(IORegister::inputUpdateTask, "InputUpdateTask", 4096, this, 1, NULL, DEFAULT_CPU);
 }
@@ -76,19 +98,18 @@ void IORegister::inputUpdateTask(void *pvParameters) {
 
 void IORegister::outputUpdateTask(void *pvParameters) {
     IORegister *instance = static_cast<IORegister *>(pvParameters);
-    while (true) {
+    for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1));
-        if (instance->localOutputStatus != IORegister::outputStatus) {
-            IORegister::outputStatus = instance->localOutputStatus;
-            MCP2.write16(IORegister::outputStatus);
+
+        uint16_t pending;
+        portENTER_CRITICAL(&instance->_outputMux);
+        pending = instance->_pendingOutput;
+        portEXIT_CRITICAL(&instance->_outputMux);
+
+        if (pending != instance->_currentOutput) {
+            instance->_currentOutput = pending;
+            MCP2.write16(instance->_currentOutput);
         }
-
-        // Bits to Ports when sending 16bit like 0b1111111111111111 it sets these pins in this order:
-        // GPA7, GPA6, GPA5, GPA4, GPA3, GPA2, GPA1, GPA0, GPB7, GPB6, GPB5, GPB4, GPB3, GPB2, GPB1, GPB0
-
-        // MCP2.write16(0b11111111 11111111);
-        // vTaskDelay(pdMS_TO_TICKS(200));
-        // MCP2.write16(0b0000000000000000);
     }
 }
 

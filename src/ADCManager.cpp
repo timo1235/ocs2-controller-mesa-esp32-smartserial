@@ -1,46 +1,38 @@
 #include <includes.h>
 
-ADCManager::ADCManager() {}
+ADCManager::ADCManager() : _snapshot{0, 0, 0, 0, 0}, _adcMux(portMUX_INITIALIZER_UNLOCKED) {}
 
 void ADCManager::init() {
-
-    xTaskCreatePinnedToCore(readInputsTask,    // Task-Funktion
-                            "ReadADCInputs",   // Name des Tasks
-                            10000,             // Stackgröße
-                            this,              // Parameter für die Task-Funktion
-                            1,                 // Priorität
-                            NULL,              // Task-Handle
-                            DEFAULT_CPU        // Core-ID
-    );
+    xTaskCreatePinnedToCore(readInputsTask, "ReadADCInputs", 4096, this, 1, NULL, DEFAULT_CPU);
 }
 
 void ADCManager::readInputsTask(void *pvParameters) {
-    ADCManager *adcManager = static_cast<ADCManager *>(pvParameters);
+    ADCManager *self = static_cast<ADCManager *>(pvParameters);
     for (;;) {
-        adcManager->joystickX     = analogRead(JOYSTICK_X);
-        adcManager->joystickY     = analogRead(JOYSTICK_Y);
-        adcManager->joystickZ     = analogRead(JOYSTICK_Z);
-        adcManager->feedrate      = analogRead(FEEDRATE);
-        adcManager->rotationSpeed = analogRead(ROTATION_SPEED);
+        // Read all ADC channels outside the lock (slow I/O)
+        int16_t jx = analogRead(JOYSTICK_X);
+        int16_t jy = analogRead(JOYSTICK_Y);
+        int16_t jz = analogRead(JOYSTICK_Z);
+        int16_t fr = analogRead(FEEDRATE);
+        int16_t rs = analogRead(ROTATION_SPEED);
 
-        // Serial.print("Joystick X: " + String(adcManager->joystickX) + " \t");
-        // Serial.print("Joystick Y: " + String(adcManager->joystickY) + " \t");
-        // Serial.print("Joystick Z: " + String(adcManager->joystickZ) + " \t");
-        // Serial.print("Feedrate: " + String(adcManager->feedrate) + " \t");
-        // Serial.print("Rotation Speed: " + String(adcManager->rotationSpeed) + " \n");
+        // Update snapshot atomically
+        portENTER_CRITICAL(&self->_adcMux);
+        self->_snapshot.joystickX     = jx;
+        self->_snapshot.joystickY     = jy;
+        self->_snapshot.joystickZ     = jz;
+        self->_snapshot.feedrate      = fr;
+        self->_snapshot.rotationSpeed = rs;
+        portEXIT_CRITICAL(&self->_adcMux);
 
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 
-int16_t ADCManager::readJoystickX() { return analogRead(JOYSTICK_X); }
-int16_t ADCManager::readJoystickY() { return analogRead(JOYSTICK_Y); }
-int16_t ADCManager::readJoystickZ() { return analogRead(JOYSTICK_Z); }
-int16_t ADCManager::readFeedrate() { return analogRead(FEEDRATE); }
-int16_t ADCManager::readRotationSpeed() { return analogRead(ROTATION_SPEED); }
-
-int16_t ADCManager::getJoystickX() const { return joystickX; }
-int16_t ADCManager::getJoystickY() const { return joystickY; }
-int16_t ADCManager::getJoystickZ() const { return joystickZ; }
-int16_t ADCManager::getFeedrate() const { return feedrate; }
-int16_t ADCManager::getRotationSpeed() const { return rotationSpeed; }
+ADCSnapshot ADCManager::getSnapshot() {
+    ADCSnapshot snap;
+    portENTER_CRITICAL(&_adcMux);
+    snap = _snapshot;
+    portEXIT_CRITICAL(&_adcMux);
+    return snap;
+}
