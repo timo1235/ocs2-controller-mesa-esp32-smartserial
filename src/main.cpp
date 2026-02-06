@@ -1,23 +1,22 @@
 #include <includes.h>
+#include <sserial.h>
 
 IORegister ioRegister;
 ADCManager adcManager;
 Debug      debug;
 bool       sserial_timeoutFlag = true;
 
+#define DEBUG_BAUD   115200
+#define SSERIAL_BAUD 2500000
+
 void setup() {
     pinMode(I2C_OCS2_SDA, INPUT);
     pinMode(I2C_OCS2_SCL, INPUT);
-    // Serial for debugging - too much output interferes with the smart serial communication
-    // since it needs to be very fast and reliable. So, use debug output wisely.
-    Serial.begin(115200);
 
-    // Start serial instance for smart serial communication
-    // Baudrate is 2.5MBit/s
-    Serial1.begin(2500000, SERIAL_8N1, SSERIAL_RXD, SSERIAL_TXD);
+    Serial.begin(DEBUG_BAUD);
+    Serial1.begin(SSERIAL_BAUD, SERIAL_8N1, SSERIAL_RXD, SSERIAL_TXD);
 
     debug.init();
-
     ioRegister.init();
     adcManager.init();
 
@@ -26,9 +25,4 @@ void setup() {
     sserial_init();
 }
 
-void loop() {
-    // ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, HIGH);
-    // delay(1000);
-    // ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, LOW);
-    // delay(1000);
-}
+void loop() {}

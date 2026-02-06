@@ -44,37 +44,8 @@
 #define DATA_DIRECTION_BI_DIRECTIONAL 0x40
 #define DATA_DIRECTION_OUTPUT         0x80
 
-#define MEMPTR(p) ((uint32_t) & p - (uint32_t) & memory)
-
-#define MEMU8(ptr)    (memory.bytes[ptr])
-#define MEMU16(ptr)   (memory.bytes[ptr] | memory.bytes[ptr + 1] << 8)
-#define MEMU32(ptr)   (memory.bytes[ptr] | memory.bytes[ptr + 1] << 8 | memory.bytes[ptr + 2] << 16 | memory.bytes[ptr + 3] << 24)
-#define MEMFLOAT(ptr) ((float) (*(float *) &memory.bytes[ptr]))
-
 #define NUM_BYTES(bits) ((bits + 7) / 8)
 
-#define IS_INPUT(pdr)  (pdr->data_direction != DATA_DIRECTION_OUTPUT)
-#define IS_OUTPUT(pdr) (pdr->data_direction == DATA_DIRECTION_OUTPUT)
-
-#define INDIRECT_PD(pd_ptr) ((process_data_descriptor_t *) (memory.bytes + *pd_ptr))
-#define DATA_DIR(pd_ptr)    INDIRECT_PD(pd_ptr)->data_direction
-#define DATA_SIZE(pd_ptr)   INDIRECT_PD(pd_ptr)->data_size
-
-#define ADD_PROCESS_VAR(args)                                                                                                              \
-    *ptocp = add_pd args;                                                                                                                  \
-    input_bits += IS_INPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                     \
-    output_bits += IS_OUTPUT(INDIRECT_PD(ptocp)) ? DATA_SIZE(ptocp) : 0;                                                                   \
-    last_pd = INDIRECT_PD(ptocp++)
-
-#define ADD_GLOBAL_VAR(args) *gtocp++ = add_pd args
-#define ADD_MODE(args)       *gtocp++ = add_mode args
-
-#define BITSLEFT(ptr) (8 - ptr)
-
-#define BOOLPIN(pin) ((uint8_t) (PIN(pin) > 0.0))
-
-#define ABS(a)          (((a) < 0.0) ? -(a) : (a))
-#define MAX(a, b)       (((a) > (b)) ? (a) : (b))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 // Data Structures
@@ -132,7 +103,6 @@ typedef struct {
 typedef union {
     struct {
         discovery_rpc_t discovery;
-        uint16_t        foo;
         uint8_t         heap[SSERIAL_MEM_SIZE - sizeof(discovery_rpc_t)];
     };
     uint8_t bytes[SSERIAL_MEM_SIZE];
@@ -143,12 +113,13 @@ typedef union {
 // Function Declarations
 void sserial_init();
 
-void handleLocalRead(uint8_t available);
-void handleLocalWrite(uint8_t available);
-void handleRpc(uint8_t available);
-void handleRead(uint8_t available);
-void handleWrite(uint8_t available);
+void handleLocalRead();
+void handleLocalWrite();
+void handleRpc();
+void handleRead();
+void handleWrite();
 void processDataInputs();
 void updateOutputPins();
-void processIncomingData();
+bool processIncomingData();
 void checkForTimeout();
+void safeState();

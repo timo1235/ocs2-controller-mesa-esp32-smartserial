@@ -1,0 +1,205 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  PLATFORMIO_CORE_DIR: ~/.platformio
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 0: Native Tests (kein Board noetig)
+  # ──────────────────────────────────────────────
+  native-tests:
+    name: Native Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            .pio/build_cache
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-native-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Run native tests
+        run: pio test -e native --verbose
+
+  # ──────────────────────────────────────────────
+  # Job 1: Build firmware
+  # ──────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            .pio/build_cache
+          key: pio-build-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-build-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Install dependencies
+        run: pio pkg install
+
+      - name: Build firmware
+        run: pio run
+
+      - name: Report firmware size
+        run: pio run --target size
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32
+          path: |
+            .pio/build/esp32doit-devkit-v1/firmware.bin
+            .pio/build/esp32doit-devkit-v1/firmware.elf
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Job 2: Static analysis (cppcheck)
+  # ──────────────────────────────────────────────
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            .pio/build_cache
+          key: pio-check-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-check-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Install dependencies
+        run: pio pkg install
+
+      - name: Run cppcheck
+        run: >
+          pio check
+          --fail-on-defect=high
+          --skip-packages
+          --filter="-:*/.pio/*"
+
+  # ──────────────────────────────────────────────
+  # Job 3: Code quality checks
+  # ──────────────────────────────────────────────
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for debugging leftovers
+        run: |
+          echo "=== Checking for common debug leftovers ==="
+          ISSUES=0
+
+          # Check for Serial.print in non-init code (allow in sserial.cpp init and debugHelper)
+          if grep -rn 'Serial\.print' src/ \
+            --include='*.cpp' \
+            | grep -v 'sserial\.cpp' \
+            | grep -v 'debugHelper\.cpp' \
+            | grep -v '^\s*//' ; then
+            echo "::warning::Found Serial.print outside of sserial.cpp and debugHelper.cpp"
+          fi
+
+          # Check for TODO/FIXME/HACK comments
+          if grep -rn 'TODO\|FIXME\|HACK\|XXX' src/ --include='*.cpp' --include='*.h'; then
+            echo "::notice::Found TODO/FIXME/HACK comments (not blocking)"
+          fi
+
+          # Check for tabs vs spaces consistency
+          if grep -Prn '\t' src/*.cpp src/*.h 2>/dev/null | head -5; then
+            echo "::notice::Mixed tabs/spaces detected"
+          fi
+
+          echo "=== Code quality checks done ==="
+
+      - name: Check header include guards
+        run: |
+          echo "=== Checking header guards ==="
+          for header in src/*.h; do
+            if ! head -1 "$header" | grep -q '#pragma once'; then
+              echo "::error file=$header::Missing #pragma once"
+              exit 1
+            fi
+          done
+          echo "All headers have #pragma once"
+
+      - name: Check for large files
+        run: |
+          echo "=== Checking file sizes ==="
+          for f in src/*.cpp src/*.h; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 800 ]; then
+              echo "::warning file=$f::$f has $lines lines (consider splitting)"
+            fi
+          done
+          echo "=== File size checks done ==="
+
+  # ──────────────────────────────────────────────
+  # Job 4: Release (only on version tags)
+  # ──────────────────────────────────────────────
+  release:
+    name: Release
+    needs: [native-tests, build, static-analysis]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-esp32
+          path: firmware/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            firmware/firmware.bin
+            firmware/firmware.elf

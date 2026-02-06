@@ -1,34 +1,26 @@
 #pragma once
 
-#include <Adafruit_ADS1X15.h>
+#include <Arduino.h>
+
+struct ADCSnapshot {
+    int16_t joystickX;
+    int16_t joystickY;
+    int16_t joystickZ;
+    int16_t feedrate;
+    int16_t rotationSpeed;
+};
 
 class ADCManager {
   public:
     ADCManager();
 
     void init();
-    // 0V = 0 | 5V ~ 26000
-    int16_t readJoystickX();
-    // 0V = 0 | 5V ~ 26000
-    int16_t readJoystickY();
-    // 0V = 0 | 5V ~ 26000
-    int16_t readJoystickZ();
-    // 0V = 0 | 5V ~ 26000
-    int16_t readFeedrate();
-    // 0V = 0 | 5V ~ 26000
-    int16_t readRotationSpeed();
 
-    int16_t getJoystickX() const;
-    int16_t getJoystickY() const;
-    int16_t getJoystickZ() const;
-    int16_t getFeedrate() const;
-    int16_t getRotationSpeed() const;
+    // Thread-safe: returns consistent snapshot of all ADC values
+    ADCSnapshot getSnapshot();
 
   private:
-    static void      readInputsTask(void *pvParameters);
-    volatile int16_t joystickX;
-    volatile int16_t joystickY;
-    volatile int16_t joystickZ;
-    volatile int16_t feedrate;
-    volatile int16_t rotationSpeed;
+    static void  readInputsTask(void *pvParameters);
+    ADCSnapshot  _snapshot;
+    portMUX_TYPE _adcMux;
 };
