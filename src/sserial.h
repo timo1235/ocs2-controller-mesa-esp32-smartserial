@@ -120,6 +120,6 @@ void handleRead();
 void handleWrite();
 void processDataInputs();
 void updateOutputPins();
-void processIncomingData();
+bool processIncomingData();
 void checkForTimeout();
 void safeState();

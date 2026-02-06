@@ -45,6 +45,7 @@
 volatile uint8_t txbuf[128];
 uint16_t         address;
 lbp_t            lbp;
+uint8_t          crc_error_count = 0;
 const char       name[] = LBPCardName;
 unit_no_t        unit;
 static memory_t  memory;
@@ -251,7 +252,10 @@ bool waitForBytes(int count) {
     if (Serial1.available() >= count) return true;
     uint32_t start = micros();
     while (Serial1.available() < count) {
-        if (micros() - start >= BYTE_TIMEOUT_US) return false;
+        if (micros() - start >= BYTE_TIMEOUT_US) {
+            emptySerialBuffer();
+            return false;
+        }
     }
     return true;
 }

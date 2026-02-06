@@ -1,4 +1,5 @@
 #include "sserial_internal.h"
+#include "crc8.h"
 #include <includes.h>
 #include <string.h>
 
@@ -41,7 +42,10 @@ void processDataInputs() {
     data_in.rotation = (uint8_t)(adc.rotationSpeed >> 4);
 }
 
-void processIncomingData() {
+bool processIncomingData() {
+    crc8_t crc = crc8_init();
+    crc = crc8_update(crc, &lbp.byte, 1);
+
     bool read_error = false;
     for (int i = 0; i < discovery.output; i++) {
         int byte = Serial1.read();
@@ -49,17 +53,30 @@ void processIncomingData() {
             read_error = true;
             break;
         }
-        ((uint8_t *) (&data_out))[i] = (uint8_t) byte;
+        uint8_t b = (uint8_t) byte;
+        ((uint8_t *) (&data_out))[i] = b;
+        crc = crc8_update(crc, &b, 1);
     }
 
-    // Consume host CRC byte (LBP spec: CRC appended to all commands)
-    Serial1.read();
+    uint8_t received_crc = Serial1.read();
 
-    txbuf[0] = read_error ? 0x01 : 0x00;
+    if (read_error || crc8_finalize(crc) != received_crc) {
+        crc_error_count++;
+        // Still send response to keep protocol in sync, but flag error
+        txbuf[0] = 0x01;
+        for (int i = 0; i < (discovery.input - 1); i++) {
+            txbuf[i + 1] = ((uint8_t *) (&data_in))[i];
+        }
+        send(discovery.input, 1);
+        return false;
+    }
+
+    txbuf[0] = 0x00;
     for (int i = 0; i < (discovery.input - 1); i++) {
         txbuf[i + 1] = ((uint8_t *) (&data_in))[i];
     }
     send(discovery.input, 1);
+    return true;
 }
 
 void updateOutputPins() {

@@ -68,6 +68,7 @@ static_assert(sizeof(sserial_in_process_data_t) == 9, "sserial_in_process_data_t
 extern volatile uint8_t            txbuf[128];
 extern uint16_t                    address;
 extern lbp_t                       lbp;
+extern uint8_t                     crc_error_count;
 extern const char                  name[];
 extern unit_no_t                   unit;
 extern uint8_t                     sserial_slave[];
