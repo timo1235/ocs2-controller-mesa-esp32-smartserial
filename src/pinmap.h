@@ -54,10 +54,6 @@
     #define I2C_SDA 21
     #define I2C_SCL 22
 
-    // I2C addresses for ADC
-    #define ADS1_ADDRESS 0x48
-    #define ADS2_ADDRESS 0x49
-
     // Analog Pins
     #define FEEDRATE       32
     #define ROTATION_SPEED 35
