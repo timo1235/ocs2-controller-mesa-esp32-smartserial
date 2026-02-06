@@ -329,7 +329,6 @@ static uint16_t add_mode(const char *name_string, uint8_t index, uint8_t type) {
 
 static void print_pd(process_data_descriptor_t *pd) {
     int   strl = strlen(&pd->names);
-    char *unit = &pd->names;
     char *name = &pd->names + strl + 1;
     switch (pd->data_type) {
     case DATA_TYPE_PAD:
@@ -435,8 +434,8 @@ void sserial_init() {
 
     ADD_MODE(("Position mode", 0, 1));
 
-    if (input_bits % 8) ADD_PROCESS_VAR(("padding", "", 8 - (input_bits % 8), DATA_TYPE_PAD, DATA_DIRECTION_INPUT, 0, 0));
-    if (output_bits % 8) ADD_PROCESS_VAR(("padding", "", 8 - (output_bits % 8), DATA_TYPE_PAD, DATA_DIRECTION_OUTPUT, 0, 0));
+    if (input_bits % 8) { ADD_PROCESS_VAR(("padding", "", 8 - (input_bits % 8), DATA_TYPE_PAD, DATA_DIRECTION_INPUT, 0, 0)); }
+    if (output_bits % 8) { ADD_PROCESS_VAR(("padding", "", 8 - (output_bits % 8), DATA_TYPE_PAD, DATA_DIRECTION_OUTPUT, 0, 0)); }
 
     memory.discovery.input  = input_bits >> 3;
     memory.discovery.output = output_bits >> 3;
@@ -512,7 +511,6 @@ void sserial_init() {
         process_data_descriptor_t *pd = (process_data_descriptor_t *) (memory.bytes + *gtocp++);
         if (pd->record_type == RECORD_TYPE_PROCESS_DATA_RECORD) {
             int   strl = strlen(&pd->names);
-            char *unit = &pd->names;
             char *name = &pd->names + strl + 1;
             Serial.printf("//global name:%s addr:0x%x size:%i dir:0x%x\n", name, pd->data_addr, pd->data_size, pd->data_direction);
             Serial.printf("#define %s_address %i\n", name, pd->data_addr);

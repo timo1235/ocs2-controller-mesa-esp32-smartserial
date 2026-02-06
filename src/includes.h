@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <ADCManager.h>
-#include <IORegister.h>
+#include <ioRegister.h>
 #include <debugHelper.h>
 #include <pinmap.h>
 
