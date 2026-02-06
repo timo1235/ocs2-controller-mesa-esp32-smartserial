@@ -113,11 +113,11 @@ typedef union {
 // Function Declarations
 void sserial_init();
 
-void handleLocalRead(uint8_t available);
-void handleLocalWrite(uint8_t available);
-void handleRpc(uint8_t available);
-void handleRead(uint8_t available);
-void handleWrite(uint8_t available);
+void handleLocalRead();
+void handleLocalWrite();
+void handleRpc();
+void handleRead();
+void handleWrite();
 void processDataInputs();
 void updateOutputPins();
 void processIncomingData();

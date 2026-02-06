@@ -57,6 +57,12 @@ void IORegister::setOutput(OutputPin pin, uint8_t value) {
     portEXIT_CRITICAL(&_outputMux);
 }
 
+void IORegister::setAllOutputs(uint16_t bits) {
+    portENTER_CRITICAL(&_outputMux);
+    _pendingOutput = bits;
+    portEXIT_CRITICAL(&_outputMux);
+}
+
 void IORegister::init() {
     attachInterrupt(digitalPinToInterrupt(MCP0_INTA), IORegister::handleInterruptMCP0, FALLING);
     attachInterrupt(digitalPinToInterrupt(MCP0_INTB), IORegister::handleInterruptMCP0, FALLING);

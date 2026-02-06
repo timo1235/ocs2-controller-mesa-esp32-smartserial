@@ -9,6 +9,7 @@
 // --- Constants ---
 #define WDT_TIMEOUT_SEC    5
 #define SSERIAL_TIMEOUT_MS 5000
+#define BYTE_TIMEOUT_US    200  // Max wait for remaining packet bytes at 2.5 MBaud (~4µs/byte)
 
 // --- Process data types ---
 #pragma pack(push, 1)
@@ -78,3 +79,4 @@ extern sserial_in_process_data_t   data_in;
 // --- Internal functions (defined in sserial.cpp) ---
 void send(uint8_t len, uint8_t docrc);
 void emptySerialBuffer();
+bool waitForBytes(int count);

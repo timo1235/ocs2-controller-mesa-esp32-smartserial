@@ -247,6 +247,15 @@ void emptySerialBuffer() {
     }
 }
 
+bool waitForBytes(int count) {
+    if (Serial1.available() >= count) return true;
+    uint32_t start = micros();
+    while (Serial1.available() < count) {
+        if (micros() - start >= BYTE_TIMEOUT_US) return false;
+    }
+    return true;
+}
+
 // --- Heap management (used only during init) ---
 
 static size_t heap_remaining() { return (heap_ptr < heap_end) ? (size_t)(heap_end - heap_ptr) : 0; }
@@ -532,19 +541,19 @@ void sserialLoop(void *pvParameters) {
             switch (lbp.ct) {
             case CT_LOCAL:
                 if (lbp.wr == 0) {
-                    handleLocalRead(available);
+                    handleLocalRead();
                 } else {
-                    handleLocalWrite(available);
+                    handleLocalWrite();
                 }
                 break;
             case CT_RPC:
-                handleRpc(available);
+                handleRpc();
                 break;
             case CT_RW:
                 if (lbp.wr == 0) {
-                    handleRead(available);
+                    handleRead();
                 } else {
-                    handleWrite(available);
+                    handleWrite();
                 }
                 break;
             default:

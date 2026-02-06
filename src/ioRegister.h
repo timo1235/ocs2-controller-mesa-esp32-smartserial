@@ -61,6 +61,7 @@ class IORegister {
     IORegister();
     void init();
     void setOutput(OutputPin pin, uint8_t value);
+    void setAllOutputs(uint16_t bits);
 
     // Thread-safe: returns consistent snapshot of both input expanders
     InputSnapshot getInputSnapshot();

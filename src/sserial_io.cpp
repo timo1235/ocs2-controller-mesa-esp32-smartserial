@@ -34,11 +34,11 @@ void processDataInputs() {
 
     // Thread-safe snapshot of analog inputs from Core 0
     ADCSnapshot adc = adcManager.getSnapshot();
-    data_in.joy_x    = map(adc.joystickX, 0, 4095, -127, 127);
-    data_in.joy_y    = map(adc.joystickY, 0, 4095, -127, 127);
-    data_in.joy_z    = map(adc.joystickZ, 0, 4095, -127, 127);
-    data_in.feedrate = map(adc.feedrate, 0, 4095, 0, 255);
-    data_in.rotation = map(adc.rotationSpeed, 0, 4095, 0, 255);
+    data_in.joy_x    = (int8_t)((adc.joystickX >> 4) - 128);
+    data_in.joy_y    = (int8_t)((adc.joystickY >> 4) - 128);
+    data_in.joy_z    = (int8_t)((adc.joystickZ >> 4) - 128);
+    data_in.feedrate = (uint8_t)(adc.feedrate >> 4);
+    data_in.rotation = (uint8_t)(adc.rotationSpeed >> 4);
 }
 
 void processIncomingData() {
@@ -63,28 +63,21 @@ void processIncomingData() {
 }
 
 void updateOutputPins() {
-    ioRegister.setOutput(OutputPin::ENA, data_out.ena);
-    ioRegister.setOutput(OutputPin::OUT1, data_out.out1);
-    ioRegister.setOutput(OutputPin::OUT2, data_out.out2);
-    ioRegister.setOutput(OutputPin::OUT3, data_out.out3);
-    ioRegister.setOutput(OutputPin::OUT4, data_out.out4);
-    ioRegister.setOutput(OutputPin::OUT5, data_out.out5);
-    ioRegister.setOutput(OutputPin::OUT6, data_out.out6);
-    ioRegister.setOutput(OutputPin::OUT7, data_out.out7);
-    ioRegister.setOutput(OutputPin::OUT8, data_out.out8);
-    ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, data_out.spindel);
+    uint16_t bits = 0;
+    if (data_out.out1)    bits |= (1 << OUT1);
+    if (data_out.out2)    bits |= (1 << OUT2);
+    if (data_out.out3)    bits |= (1 << OUT3);
+    if (data_out.out4)    bits |= (1 << OUT4);
+    if (data_out.out5)    bits |= (1 << OUT5);
+    if (data_out.out6)    bits |= (1 << OUT6);
+    if (data_out.out7)    bits |= (1 << OUT7);
+    if (data_out.out8)    bits |= (1 << OUT8);
+    if (data_out.ena)     bits |= (1 << ENA);
+    if (data_out.spindel) bits |= (1 << SPINDEL_ON_OFF);
+    ioRegister.setAllOutputs(bits);
 }
 
 void safeState() {
-    ioRegister.setOutput(OutputPin::ENA, LOW);
-    ioRegister.setOutput(OutputPin::SPINDEL_ON_OFF, LOW);
-    ioRegister.setOutput(OutputPin::OUT1, LOW);
-    ioRegister.setOutput(OutputPin::OUT2, LOW);
-    ioRegister.setOutput(OutputPin::OUT3, LOW);
-    ioRegister.setOutput(OutputPin::OUT4, LOW);
-    ioRegister.setOutput(OutputPin::OUT5, LOW);
-    ioRegister.setOutput(OutputPin::OUT6, LOW);
-    ioRegister.setOutput(OutputPin::OUT7, LOW);
-    ioRegister.setOutput(OutputPin::OUT8, LOW);
+    ioRegister.setAllOutputs(0);
     memset(&data_out, 0, sizeof(data_out));
 }
